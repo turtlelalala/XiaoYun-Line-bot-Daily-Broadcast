@@ -101,7 +101,7 @@ def _is_image_relevant_for_food_by_gemini_sync(image_base64: str, english_food_t
         logger.error(f"Gemini 食物圖片相關性判斷時發生未知錯誤 (主題: {english_food_theme_query}): {e}", exc_info=True)
         return False
 
-def fetch_image_for_food_from_unsplash(english_food_theme_query: str, max_candidates_to_check: int = 10, unsplash_per_page: int = 10) -> tuple[str | None, str]:
+def fetch_image_for_food_from_unsplash(english_food_theme_query: str, max_candidates_to_check: int = 10, unsplash_per_page: int = 10) -> tuple[str | None, str]: # max_candidates_to_check 已修改
     if not UNSPLASH_ACCESS_KEY:
         logger.warning("fetch_image_for_food_from_unsplash called but UNSPLASH_ACCESS_KEY is not set.")
         return None, english_food_theme_query
@@ -118,7 +118,7 @@ def fetch_image_for_food_from_unsplash(english_food_theme_query: str, max_candid
     params_search = {
         "query": english_food_theme_query + " food closeup",
         "page": 1,
-        "per_page": unsplash_per_page,
+        "per_page": unsplash_per_page, # 將獲取 unsplash_per_page 數量的圖片
         "orientation": "squarish",
         "content_filter": "high",
         "order_by": "relevant",
@@ -132,8 +132,10 @@ def fetch_image_for_food_from_unsplash(english_food_theme_query: str, max_candid
 
         if data_search and data_search.get("results"):
             checked_count = 0
+            # 遍歷所有從 Unsplash 獲取的圖片 (最多 unsplash_per_page 張)
+            # 但 Gemini 檢查的上限由 max_candidates_to_check 控制
             for image_data in data_search["results"]:
-                if checked_count >= max_candidates_to_check:
+                if checked_count >= max_candidates_to_check: # 如果已檢查的圖片達到上限
                     logger.info(f"已達到食物圖片 Gemini 檢查上限 ({max_candidates_to_check}) for theme '{english_food_theme_query}'.")
                     break
                 potential_image_url = image_data.get("urls", {}).get("regular")
@@ -523,14 +525,14 @@ def get_daily_message_from_gemini_with_retry(max_retries=3, initial_retry_delay=
         logger.info(f"檢測到幸運食物圖片關鍵字: '{lucky_food_keyword_for_image}'，嘗試從 Unsplash 獲取圖片...")
         image_url, _ = fetch_image_for_food_from_unsplash(
             lucky_food_keyword_for_image,
-            max_candidates_to_check=10, # 修改了這裡
-            unsplash_per_page=10      # 修改了這裡
+            max_candidates_to_check=10, # 修改了這裡，檢查所有獲取的圖片
+            unsplash_per_page=10      # 保持獲取10張
         )
         if image_url:
             messages_to_send.append(ImageSendMessage(original_content_url=image_url, preview_image_url=image_url))
             logger.info(f"成功獲取並驗證幸運食物圖片: {image_url}")
         else:
-            logger.warning(f"未能為關鍵字 '{lucky_food_keyword_for_image}' 找到合適的圖片 (已檢查最多 {5} 個候選)。本次將只發送文字訊息。")
+            logger.warning(f"未能為關鍵字 '{lucky_food_keyword_for_image}' 找到合適的圖片 (已檢查最多 {10} 個候選)。本次將只發送文字訊息。") # 日誌也對應修改
     elif not UNSPLASH_ACCESS_KEY:
         logger.info("UNSPLASH_ACCESS_KEY 未設定，跳過幸運食物圖片獲取。")
     elif not lucky_food_keyword_for_image or not lucky_food_keyword_for_image.strip():
