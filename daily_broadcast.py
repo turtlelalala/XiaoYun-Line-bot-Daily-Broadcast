@@ -8,11 +8,10 @@ from linebot import LineBotApi
 from linebot.models import TextSendMessage, ImageSendMessage
 import json
 import time
-import logging # 使用 logging 模組
-import base64 # 用於圖片轉 base64
+import logging
+import base64
 
 # --- 配置日誌 ---
-# 在 GitHub Actions 中，日誌會自動輸出到控制台
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s',
@@ -26,10 +25,9 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 OPENWEATHERMAP_API_KEY = os.getenv("OPENWEATHERMAP_API_KEY")
 UNSPLASH_ACCESS_KEY = os.getenv("UNSPLASH_ACCESS_KEY")
 
-GEMINI_MODEL_NAME = "gemini-1.5-flash-latest" # 或 gemini-1.5-pro-latest
+GEMINI_MODEL_NAME = "gemini-1.5-flash-latest"
 GEMINI_TEXT_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL_NAME}:generateContent"
-# Gemini Vision 模型通常與 Text 模型使用相同的 generateContent 端點，但 prompt 結構不同
-GEMINI_VISION_MODEL_NAME = "gemini-1.5-flash-latest" # 或 gemini-pro-vision, gemini-1.5-pro-latest
+GEMINI_VISION_MODEL_NAME = "gemini-1.5-flash-latest"
 GEMINI_VISION_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_VISION_MODEL_NAME}:generateContent"
 
 
@@ -44,7 +42,6 @@ if not GEMINI_API_KEY:
 if not OPENWEATHERMAP_API_KEY:
     logger.critical("環境變數 OPENWEATHERMAP_API_KEY 未設定。")
     critical_error_occurred = True
-# UNSPLASH_ACCESS_KEY 缺失是警告，不是致命錯誤，因為文字可以照發
 if not UNSPLASH_ACCESS_KEY:
     logger.warning("環境變數 UNSPLASH_ACCESS_KEY 未設定，幸運食物圖片功能將不可用。")
 
@@ -59,7 +56,7 @@ except Exception as e:
     logger.critical(f"初始化 LineBotApi 失敗: {e}", exc_info=True)
     exit(1)
 
-# --- 圖片相關函數 (從你的 Flask App 移植並調整) ---
+# --- 圖片相關函數 ---
 def _is_image_relevant_for_food_by_gemini_sync(image_base64: str, english_food_theme_query: str, image_url_for_log: str = "N/A") -> bool:
     logger.info(f"開始使用 Gemini Vision 判斷食物圖片相關性。英文主題: '{english_food_theme_query}', 圖片URL (日誌用): {image_url_for_log[:70]}...")
     prompt_parts = [
@@ -76,11 +73,11 @@ def _is_image_relevant_for_food_by_gemini_sync(image_base64: str, english_food_t
     user_prompt_text = "\n".join(prompt_parts)
     headers = {"Content-Type": "application/json"}
     gemini_url_with_key_vision = f"{GEMINI_VISION_API_URL}?key={GEMINI_API_KEY}"
-    payload_contents = [{"role": "user", "parts": [{"text": user_prompt_text}, {"inline_data": {"mime_type": "image/jpeg", "data": image_base64}}]}] # 假設是 JPEG
+    payload_contents = [{"role": "user", "parts": [{"text": user_prompt_text}, {"inline_data": {"mime_type": "image/jpeg", "data": image_base64}}]}]
     payload = {"contents": payload_contents, "generationConfig": {"temperature": 0.0, "maxOutputTokens": 10}}
 
     try:
-        response = requests.post(gemini_url_with_key_vision, headers=headers, json=payload, timeout=45) # 增加 Vision API 超時
+        response = requests.post(gemini_url_with_key_vision, headers=headers, json=payload, timeout=45)
         response.raise_for_status()
         result = response.json()
         if "candidates" in result and result["candidates"] and \
@@ -90,7 +87,6 @@ def _is_image_relevant_for_food_by_gemini_sync(image_base64: str, english_food_t
             logger.info(f"Gemini 食物圖片相關性判斷回應: '{gemini_answer}' (主題: '{english_food_theme_query}')")
             return "YES" in gemini_answer
         else:
-            # 記錄詳細的錯誤原因
             block_reason = result.get("promptFeedback", {}).get("blockReason")
             safety_ratings = result.get("promptFeedback", {}).get("safetyRatings")
             logger.error(f"Gemini 食物圖片相關性判斷 API 回應格式異常或無候選。主題: '{english_food_theme_query}'. Block Reason: {block_reason}. Safety Ratings: {safety_ratings}. Full Response: {result}")
@@ -114,18 +110,18 @@ def fetch_image_for_food_from_unsplash(english_food_theme_query: str, max_candid
         return None, "unspecified food"
 
     query_words = english_food_theme_query.strip().lower().split()
-    if not (1 <= len(query_words) <= 3): # 允許1-3個詞的食物關鍵字
+    if not (1 <= len(query_words) <= 3):
         logger.warning(f"Unsplash 食物查詢 '{english_food_theme_query}' 不是1到3個詞。仍將嘗試搜尋。")
 
     logger.info(f"開始從 Unsplash 搜尋食物圖片，英文主題: '{english_food_theme_query}'")
     api_url_search = "https://api.unsplash.com/search/photos"
     params_search = {
-        "query": english_food_theme_query + " food closeup", # 嘗試加入 "food closeup" 提高相關性
+        "query": english_food_theme_query + " food closeup",
         "page": 1,
         "per_page": unsplash_per_page,
-        "orientation": "squarish", # 食物圖片方形或橫向可能較好
-        "content_filter": "high", # 避免低質量或敏感內容
-        "order_by": "relevant", # 或 "latest"
+        "orientation": "squarish",
+        "content_filter": "high",
+        "order_by": "relevant",
         "client_id": UNSPLASH_ACCESS_KEY
     }
     try:
@@ -140,15 +136,12 @@ def fetch_image_for_food_from_unsplash(english_food_theme_query: str, max_candid
                 if checked_count >= max_candidates_to_check:
                     logger.info(f"已達到食物圖片 Gemini 檢查上限 ({max_candidates_to_check}) for theme '{english_food_theme_query}'.")
                     break
-
                 potential_image_url = image_data.get("urls", {}).get("regular")
                 if not potential_image_url:
                     logger.warning(f"Unsplash 食物圖片數據中 'regular' URL 為空。ID: {image_data.get('id','N/A')}")
                     continue
-
                 alt_description = image_data.get("alt_description", "N/A")
                 logger.info(f"從 Unsplash 獲取到待驗證食物圖片 URL: {potential_image_url} (Alt: {alt_description}) for theme '{english_food_theme_query}'")
-
                 try:
                     image_response = requests.get(potential_image_url, timeout=15, stream=True)
                     image_response.raise_for_status()
@@ -156,37 +149,27 @@ def fetch_image_for_food_from_unsplash(english_food_theme_query: str, max_candid
                     if not content_type.startswith('image/'):
                         logger.warning(f"URL {potential_image_url} 返回的 Content-Type 不是圖片: {content_type}")
                         continue
-
                     image_bytes = image_response.content
-                    if len(image_bytes) > 4 * 1024 * 1024: # 4MB 限制
+                    if len(image_bytes) > 4 * 1024 * 1024:
                         logger.warning(f"食物圖片 {potential_image_url} 下載後發現過大 ({len(image_bytes)} bytes)，跳過。")
                         continue
-
-                    # 嘗試確定MIME類型，用於Gemini Vision。通常Unsplash是jpeg。
                     mime_type_to_use = "image/jpeg"
                     if 'png' in content_type:
                         mime_type_to_use = "image/png"
-                    elif 'gif' in content_type: # Gemini Vision 可能不支援 gif
+                    elif 'gif' in content_type:
                         logger.warning(f"食物圖片 {potential_image_url} 是 GIF，可能不受Gemini Vision支持，跳過。")
                         continue
-                    
                     image_base64 = base64.b64encode(image_bytes).decode('utf-8')
                     checked_count += 1
-                    
-                    # 在調用 _is_image_relevant_for_food_by_gemini_sync 時傳遞 mime_type
-                    # 但我們已在 _is_image_relevant_for_food_by_gemini_sync 中寫死為 image/jpeg
-                    # 如果需要動態，則需要修改該函數
                     if _is_image_relevant_for_food_by_gemini_sync(image_base64, english_food_theme_query, potential_image_url):
                         logger.info(f"Gemini 認為食物圖片 {potential_image_url} 與主題 '{english_food_theme_query}' 相關。")
                         return potential_image_url, english_food_theme_query
                     else:
                         logger.info(f"Gemini 認為食物圖片 {potential_image_url} 與主題 '{english_food_theme_query}' 不相關。")
-
                 except requests.exceptions.RequestException as img_req_err:
                     logger.error(f"下載或處理 Unsplash 食物圖片 {potential_image_url} 失敗: {img_req_err}")
                 except Exception as img_err:
                     logger.error(f"處理 Unsplash 食物圖片 {potential_image_url} 時發生未知錯誤: {img_err}", exc_info=True)
-            
             logger.warning(f"遍歷了 {len(data_search.get('results',[]))} 張 Unsplash 食物圖片（實際檢查 {checked_count} 張），未找到 Gemini 認為相關的圖片 for theme '{english_food_theme_query}'.")
         else:
             logger.warning(f"Unsplash 食物搜尋 '{english_food_theme_query}' 無結果或格式錯誤。 Response: {data_search}")
@@ -198,11 +181,10 @@ def fetch_image_for_food_from_unsplash(english_food_theme_query: str, max_candid
         logger.error(f"Unsplash API 食物搜尋請求失敗 (搜尋: '{english_food_theme_query}'): {e}")
     except Exception as e:
         logger.error(f"fetch_image_for_food_from_unsplash 發生未知錯誤 (搜尋: '{english_food_theme_query}'): {e}", exc_info=True)
-
     logger.warning(f"最終未能找到與食物主題 '{english_food_theme_query}' 高度相關的圖片。")
     return None, english_food_theme_query
 
-# --- 日期、節氣、通用天氣函數 (與上次提供的版本相同) ---
+# --- 日期、節氣、通用天氣函數 ---
 def get_current_datetime_for_location(timezone_str='Asia/Kuala_Lumpur'):
     try:
         target_tz = pytz.timezone(timezone_str)
@@ -234,14 +216,13 @@ def get_current_solar_term_with_feeling(datetime_obj):
     month = datetime_obj.month
     day = datetime_obj.day
     for (m, d_start), term_info in SOLAR_TERMS_DATA.items():
-        # 簡單的日期範圍判斷，實際節氣日期會略有浮動
-        d_end = d_start + 1 # 假設節氣影響1-2天
+        d_end = d_start + 1
         if month == m and (d_start <= day <= d_end):
             return term_info
     return "一個神秘又美好的日子 (小雲覺得今天空氣裡有香香甜甜的味道！可能會發生很棒的事喔～✨)"
 
 def get_weather_for_generic_location(api_key, lat=1.5755, lon=103.8225, lang="zh_tw", units="metric"):
-    location_name_display = "你那裡" # 更通用
+    location_name_display = "你那裡"
     weather_url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={api_key}&units={units}&lang={lang}"
     default_weather_info = {
         "weather_description": "一個充滿貓咪魔法的好天氣",
@@ -262,10 +243,10 @@ def get_weather_for_generic_location(api_key, lat=1.5755, lon=103.8225, lang="zh
             temp_float = weather_data["main"].get("temp")
             temp_str = f"{temp_float:.1f}°C" if temp_float is not None else "舒適的溫度"
             reaction = f"天氣是「{description}」，感覺很棒耶！最適合...在窗邊偷偷看著外面發生什麼事了喵！👀"
-            if temp_float is not None:
+            if temp_float is not None: # 只有在獲得有效溫度時才進行更細緻的判斷
                 if "雨" in description or "rain" in description.lower() or "drizzle" in description.lower():
                     reaction = f"好像下著「{description}」耶...滴滴答答...如果不用出門，跟小雲一起躲在毯子裡聽雨聲好不好嘛...☔️"
-                elif "雲" in description or "cloud" in description.lower() and "晴" not in description: # 避免 "晴時多雲" 也判斷成只想看雲
+                elif "雲" in description or "cloud" in description.lower() and "晴" not in description:
                     reaction = f"今天「{description}」，天上的雲好像軟綿綿的枕頭～☁️ 小雲想跳上去睡個午覺... (可是小雲不會飛...)"
                 elif temp_float > 32:
                     reaction = f"嗚哇～{temp_str}！好熱好熱！小雲的肉球都要黏在地板上了啦！🥵 你也要多喝水水，不要像小雲一樣只會吐舌頭散熱喔！"
@@ -346,7 +327,7 @@ def generate_gemini_daily_prompt_v3(current_date_str_formatted, current_solar_te
 
 【📅 小雲的日曆喵】：{current_date_str_formatted} (後面可以加一句小雲對日期的害羞感想，例如：「咪...又過了一天了耶...時間跑得好快喔...（小爪子撥著空氣）」)
 
-【☁️ 今日天氣悄悄話】：今天的天氣是「{general_weather_info['weather_description']}」，氣溫大約 {general_weather_info['temperature']}。小雲想說：「{general_weather_info['xiaoyun_weather_reaction']}」 (小雲對天氣的反應要非常害羞、膽小或充滿貓咪的好奇，例如：「哇...「{general_weather_info['weather_description']}」耶...聽起來...聽起來好像有點厲害...小雲...小雲還是躲在窗邊偷偷看一下好了...（只敢露出一隻眼睛）」)
+【☁️ 今日天氣悄悄話】：今天你那裡的天氣是「{general_weather_info['weather_description']}」，氣溫大約 {general_weather_info['temperature']}。小雲想說：「{general_weather_info['xiaoyun_weather_reaction']}」 (小雲對天氣的反應要非常害羞、膽小或充滿貓咪的好奇，例如：「哇...「{general_weather_info['weather_description']}」耶...聽起來...聽起來好像有點厲害...小雲...小雲還是躲在窗邊偷偷看一下好了...（只敢露出一隻眼睛）」)
 
 【☀️ 今日節氣 (參考用)】：{current_solar_term_with_feeling} (小雲對節氣的感想也要非常符合他的個性，例如：「{current_solar_term_with_feeling.split(' (')[0]}...是什麼呀？喵嗚...？小雲...小雲只知道...肚子餓的時候要吃罐罐...這個...這個可以吃嗎？還是可以躲在裡面睡覺覺呢？（歪頭，一臉困惑又好奇）」)
 
@@ -383,13 +364,12 @@ def generate_gemini_daily_prompt_v3(current_date_str_formatted, current_solar_te
 """
     return prompt
 
-# --- Gemini API 呼叫與訊息處理 (get_daily_message_from_gemini_with_retry) ---
-def get_daily_message_from_gemini_with_retry(max_retries=2, initial_retry_delay=5):
+# --- Gemini API 呼叫與訊息處理 ---
+def get_daily_message_from_gemini_with_retry(max_retries=3, initial_retry_delay=10): # 增加重試次數和延遲
     logger.info("開始從 Gemini 獲取每日訊息內容...")
-    target_location_timezone = 'Asia/Kuala_Lumpur' # 或其他你希望的通用參考時區
-    # 通用天氣獲取的經緯度，可以選擇一個中性地點，或者不特別強調
-    generic_lat = 35.6895 # 例如東京 (只是作為一個獲取一般天氣的參考點)
-    generic_lon = 139.6917
+    target_location_timezone = 'Asia/Kuala_Lumpur'
+    generic_lat = 35.6895 # 東京的緯度 (僅作天氣參考)
+    generic_lon = 139.6917 # 東京的經度
 
     current_target_loc_dt = get_current_datetime_for_location(target_location_timezone)
     current_date_str_formatted = format_date_and_day(current_target_loc_dt)
@@ -401,19 +381,19 @@ def get_daily_message_from_gemini_with_retry(max_retries=2, initial_retry_delay=
     )
     current_solar_term_with_feeling = get_current_solar_term_with_feeling(current_target_loc_dt)
 
-    prompt_to_gemini = generate_gemini_daily_prompt_v3( # 使用更新後的 prompt
+    prompt_to_gemini = generate_gemini_daily_prompt_v3(
         current_date_str_formatted,
         current_solar_term_with_feeling,
         general_weather_info
     )
 
     headers = {"Content-Type": "application/json"}
-    gemini_url_with_key = f"{GEMINI_TEXT_API_URL}?key={GEMINI_API_KEY}" # 確認使用文字模型API URL
+    gemini_url_with_key = f"{GEMINI_TEXT_API_URL}?key={GEMINI_API_KEY}"
     payload = {
         "contents": [{"role": "user", "parts": [{"text": prompt_to_gemini}]}],
         "generationConfig": {
-            "temperature": 0.9, # 略微調高溫度以增加一點點多樣性，但仍需穩定
-            "maxOutputTokens": 3000, # 增加 token 以容納更長的內容和 JSON 結構
+            "temperature": 0.9,
+            "maxOutputTokens": 3500, # 確保足夠的 Token
             "response_mime_type": "application/json"
         }
     }
@@ -424,41 +404,37 @@ def get_daily_message_from_gemini_with_retry(max_retries=2, initial_retry_delay=
     for attempt in range(max_retries + 1):
         try:
             logger.info(f"Attempt {attempt + 1}/{max_retries + 1}: 向 Gemini API 發送請求獲取每日晨報內容...")
-            response = requests.post(gemini_url_with_key, headers=headers, json=payload, timeout=100) # 增加超時
+            response = requests.post(gemini_url_with_key, headers=headers, json=payload, timeout=120) # 進一步增加超時
             response.raise_for_status()
             
             content_data = None
-            try:
-                # 優先嘗試直接解析整個回應為 JSON (因為 response_mime_type="application/json")
-                result_data = response.json()
-                logger.debug(f"Attempt {attempt + 1}: Gemini API 原始回應 (已解析為JSON): {json.dumps(result_data, ensure_ascii=False, indent=2)}")
-                if "candidates" in result_data and result_data["candidates"] and \
-                   "content" in result_data["candidates"][0] and "parts" in result_data["candidates"][0]["content"] and \
-                   result_data["candidates"][0]["content"]["parts"]:
-                    
-                    part_data = result_data["candidates"][0]["content"]["parts"][0]
-                    # Gemini 在 response_mime_type="application/json" 時，parts[0] 應該直接是 JSON 物件
-                    if isinstance(part_data, dict):
-                         content_data = part_data # 這就是我們期望的 JSON 物件
-                         logger.info(f"Attempt {attempt + 1}: Gemini 直接返回了 JSON 物件在 'parts[0]'。")
-                    elif "text" in part_data: # 以防萬一它還是把JSON字串包在text裡
-                        gemini_json_payload_str = part_data["text"].strip()
-                        logger.info(f"Attempt {attempt + 1}: Gemini 返回了 JSON 字串在 'text': {gemini_json_payload_str[:300]}...")
-                        content_data = json.loads(gemini_json_payload_str) # 解析這個字串
-                    else:
-                        raise ValueError("Gemini response 'parts[0]' 既不是預期的 JSON 物件，也沒有 'text' 欄位。")
-                else:
-                     logger.error(f"Attempt {attempt + 1}: Gemini API 回應格式錯誤或無候選內容。")
-                     raise ValueError("Gemini API response format error or no candidates.")
+            # 優先嘗試直接解析整個回應為 JSON
+            result_data = response.json()
+            logger.debug(f"Attempt {attempt + 1}: Gemini API 原始回應 (已解析為JSON): {json.dumps(result_data, ensure_ascii=False, indent=2)}")
 
-            except (json.JSONDecodeError, ValueError) as e: # response.json() 本身失敗或後續解析失敗
-                logger.error(f"Attempt {attempt + 1}: 解析 Gemini 回應為 JSON 物件時失敗: {e}. Response text from API: {response.text[:500]}...")
-                if attempt == max_retries: # 如果是最後一次重試
-                    generated_text_content = f"喵嗚...小雲的晨報內容今天好像變成一團亂碼了...對不起喔... (錯誤: {e})"
-                    lucky_food_keyword_for_image = None
-                    break # 跳出重試，使用這個錯誤訊息
-                time.sleep(initial_retry_delay * (2 ** attempt))
-                continue # 繼續下一次重試
+            if "candidates" in result_data and result_data["candidates"] and \
+               "content" in result_data["candidates"][0] and "parts" in result_data["candidates"][0]["content"] and \
+               result_data["candidates"][0]["content"]["parts"]:
+                
+                part_data_container = result_data["candidates"][0]["content"]["parts"][0]
+                
+                if isinstance(part_data_container, dict) and "main_text_content" in part_data_container and "lucky_food_image_keyword" in part_data_container:
+                    content_data = part_data_container
+                    logger.info(f"Attempt {attempt + 1}: Gemini 直接返回了目標 JSON 物件在 'parts[0]'。")
+                elif isinstance(part_data_container, dict) and "text" in part_data_container:
+                    json_string_from_text = part_data_container["text"].strip()
+                    logger.info(f"Attempt {attempt + 1}: Gemini 返回了 JSON 字串在 'parts[0].text': {json_string_from_text[:300]}...")
+                    try:
+                        content_data = json.loads(json_string_from_text)
+                    except json.JSONDecodeError as json_e:
+                        logger.error(f"Attempt {attempt + 1}: 無法解析 'parts[0].text' 中的 JSON 字串: {json_e}")
+                        raise # 重新拋出異常，讓外層 try-except 捕獲並重試或處理
+                else:
+                    logger.error(f"Attempt {attempt + 1}: Gemini 'parts[0]' 的結構非預期: {part_data_container}")
+                    raise ValueError("Gemini response 'parts[0]' structure unexpected.")
+            else:
+                 logger.error(f"Attempt {attempt + 1}: Gemini API 回應格式錯誤或無候選內容。")
+                 raise ValueError("Gemini API response format error or no candidates.")
 
             # 檢查提取的 content_data 是否符合預期
             if isinstance(content_data, dict) and \
@@ -468,63 +444,78 @@ def get_daily_message_from_gemini_with_retry(max_retries=2, initial_retry_delay=
                 generated_text_content = str(content_data["main_text_content"])
                 lucky_food_keyword_for_image = str(content_data["lucky_food_image_keyword"]).strip()
                 
-                if not generated_text_content.strip(): # 檢查文字內容是否為空
+                if not generated_text_content.strip():
                     logger.warning(f"Attempt {attempt + 1}: Gemini 返回的 main_text_content 為空。")
                     if attempt == max_retries:
                         generated_text_content = "咪...小雲今天好像詞窮了，晨報內容空空的耶...（歪頭）"
-                        lucky_food_keyword_for_image = None # 如果文字內容空，圖片也可能無意義
-                    else: # 繼續重試
+                        lucky_food_keyword_for_image = None
+                    else:
                         time.sleep(initial_retry_delay * (2 ** attempt))
-                        continue
+                        continue # 重試
                 
                 logger.info(f"成功從 Gemini 解析出每日訊息內容。幸運食物圖片關鍵字: '{lucky_food_keyword_for_image}'")
                 break # 成功獲取，跳出重試循環
             else:
-                logger.error(f"Attempt {attempt + 1}: Gemini 回應的 JSON 物件缺少 'main_text_content' 或 'lucky_food_image_keyword'，或格式不正確。 Data: {content_data}")
+                logger.error(f"Attempt {attempt + 1}: 解析後的 JSON 物件缺少必要 key 或格式不正確。 Parsed Data: {content_data}")
                 if attempt == max_retries:
                     generated_text_content = "喵...小雲今天的晨報格式有點怪怪的...內容不完整耶...🥺"
                     lucky_food_keyword_for_image = None
-                # 繼續下一次重試 (如果還有)
         
         except requests.exceptions.Timeout:
             logger.error(f"Attempt {attempt + 1}: 請求 Gemini API 超時。")
             if attempt == max_retries:
                 generated_text_content = "喵嗚～小雲的秘密電波今天好像塞車了，晨報送不出來...下次再試試看！🚗💨"
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Attempt {attempt + 1}: 請求 Gemini API 失敗: {e}")
+        except requests.exceptions.HTTPError as http_err: # 更具體地捕獲 HTTP 錯誤
+            logger.error(f"Attempt {attempt + 1}: 請求 Gemini API 發生 HTTP 錯誤: {http_err}. Response: {http_err.response.text[:500] if http_err.response else 'No response text'}")
+            # 檢查是否有 promptFeedback (例如被 block)
+            try:
+                error_details = http_err.response.json() if http_err.response else {}
+                feedback = error_details.get("promptFeedback", {})
+                block_reason = feedback.get("blockReason")
+                if block_reason:
+                    logger.error(f"Gemini API 請求被阻擋，原因: {block_reason}")
+                    if attempt == max_retries:
+                        generated_text_content = f"咪...小雲今天的晨報被一股神秘的力量 ({block_reason}) 緊緊地藏起來了！不給看！"
+                elif attempt == max_retries:
+                     generated_text_content = "喵嗚～小雲的秘密電波好像被外星貓干擾了！晨報咻～一聲不見了！🛸👽"
+            except ValueError: # 如果 response.json() 解析失敗
+                if attempt == max_retries:
+                     generated_text_content = "喵嗚～小雲的秘密電波好像被外星貓干擾了！晨報咻～一聲不見了！🛸👽"
+
+        except requests.exceptions.RequestException as req_err: # 其他 requests 相關錯誤
+            logger.error(f"Attempt {attempt + 1}: 請求 Gemini API 失敗: {req_err}")
             if attempt == max_retries:
-                generated_text_content = "喵嗚～小雲的秘密電波好像被外星貓干擾了！晨報咻～一聲不見了！🛸👽"
-        except Exception as e:
+                generated_text_content = "喵嗚～小雲的秘密電波好像秀逗了，晨報飛走了～💨"
+        except (json.JSONDecodeError, ValueError) as parse_err: # 捕獲解析錯誤和前面 raise 的 ValueError
+             logger.error(f"Attempt {attempt + 1}: 解析 Gemini 回應時發生錯誤: {parse_err}")
+             if attempt == max_retries:
+                generated_text_content = f"喵嗚...小雲的晨報內容今天好像變成一團亂碼了...對不起喔... (錯誤細節請看日誌)"
+        except Exception as e: # 未知錯誤
             logger.error(f"Attempt {attempt + 1}: 處理 Gemini 回應時發生未知錯誤: {e}", exc_info=True)
             if attempt == max_retries:
                 generated_text_content = "咪！小雲的腦袋今天變成一團毛線球了！晨報也跟著打結了！🧶😵"
 
-        if generated_text_content is not None and attempt < max_retries: # 成功或已設定錯誤訊息，但非最後一次嘗試
-             pass # 這裡不需要做什麼，因為 break 會跳出
+        if generated_text_content is not None and attempt < max_retries and lucky_food_keyword_for_image is not None:
+             pass # 如果已經成功，但不是最後一次嘗試 (雖然 break 了，但以防萬一)
         elif attempt < max_retries: # 發生錯誤且還有重試機會
             delay = initial_retry_delay * (2 ** attempt)
             logger.info(f"等待 {delay} 秒後重試...")
             time.sleep(delay)
-        # 如果是最後一次嘗試且仍然失敗，generated_text_content 應該已經被設定為錯誤訊息
     
-    if generated_text_content is None: # 理論上經過重試和錯誤處理，這裡不應該是 None
+    if generated_text_content is None:
         logger.error("CRITICAL: 所有嘗試從 Gemini 獲取訊息均失敗，且未設定預設錯誤文字。")
         generated_text_content = "喵嗚...小雲努力了好多次，但是今天的晨報還是卡住了...明天再試一次好不好嘛...🥺"
         lucky_food_keyword_for_image = None
 
-
-    # ---- 準備 LINE 訊息列表 ----
     messages_to_send = []
-    if generated_text_content: # 確保至少有文字內容
+    if generated_text_content:
         messages_to_send.append(TextSendMessage(text=generated_text_content))
-        logger.info(f"主文字訊息已準備好: {generated_text_content[:200].replace(chr(10), '↵ ')}...") # 替換換行符以便日誌閱讀
+        logger.info(f"主文字訊息已準備好: {generated_text_content[:200].replace(chr(10), '↵ ')}...")
     else:
-        # 這是極端情況下的備案，理論上上面應該已經處理了
         logger.error("CRITICAL ERROR: generated_text_content 為空，無法發送任何文字訊息。")
         messages_to_send.append(TextSendMessage(text="咪...小雲今天腦袋空空，晨報飛走了...對不起喔..."))
-        return messages_to_send # 直接返回，不嘗試圖片
+        return messages_to_send
 
-    # 嘗試獲取幸運食物圖片
     if UNSPLASH_ACCESS_KEY and lucky_food_keyword_for_image and lucky_food_keyword_for_image.strip():
         logger.info(f"檢測到幸運食物圖片關鍵字: '{lucky_food_keyword_for_image}'，嘗試從 Unsplash 獲取圖片...")
         image_url, _ = fetch_image_for_food_from_unsplash(lucky_food_keyword_for_image, max_candidates_to_check=2, unsplash_per_page=3)
@@ -533,44 +524,51 @@ def get_daily_message_from_gemini_with_retry(max_retries=2, initial_retry_delay=
             logger.info(f"成功獲取並驗證幸運食物圖片: {image_url}")
         else:
             logger.warning(f"未能為關鍵字 '{lucky_food_keyword_for_image}' 找到合適的圖片。本次將只發送文字訊息。")
-            # 不發送失敗訊息給用戶
     elif not UNSPLASH_ACCESS_KEY:
         logger.info("UNSPLASH_ACCESS_KEY 未設定，跳過幸運食物圖片獲取。")
     elif not lucky_food_keyword_for_image or not lucky_food_keyword_for_image.strip():
         logger.info("Gemini 未提供有效的幸運食物圖片關鍵字，跳過圖片獲取。")
-    else:
-        logger.info("未知原因，跳過幸運食物圖片獲取。") # 理論上不應到此
         
     return messages_to_send
 
-
 # --- 主執行 ---
 if __name__ == "__main__":
-    script_start_time = datetime.datetime.now(pytz.timezone('Asia/Kuala_Lumpur')) # 或你選擇的參考時區
+    script_start_time = datetime.datetime.now(pytz.timezone('Asia/Kuala_Lumpur'))
     logger.info(f"========== 每日小雲晨報廣播腳本開始執行 ==========")
     logger.info(f"目前時間 ({script_start_time.tzinfo}): {script_start_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
     final_messages_to_send = get_daily_message_from_gemini_with_retry()
 
-    if final_messages_to_send: # 它總是會返回一個列表
+    if final_messages_to_send:
         try:
             logger.info(f"準備廣播 {len(final_messages_to_send)} 則訊息到 LINE...")
             for i, msg in enumerate(final_messages_to_send):
                  if isinstance(msg, TextSendMessage):
-                     log_text_preview = msg.text.replace("\n", "↵ ")[:250] # 增加預覽長度
+                     log_text_preview = msg.text.replace("\n", "↵ ")[:250]
                      logger.info(f"  訊息 #{i+1} (TextSendMessage): {log_text_preview}...")
                  elif isinstance(msg, ImageSendMessage):
                      logger.info(f"  訊息 #{i+1} (ImageSendMessage): Original URL: {msg.original_content_url}")
                  else:
                      logger.info(f"  訊息 #{i+1} (未知類型: {type(msg)})")
             
-            line_bot_api.broadcast(messages=final_messages_to_send)
-            logger.info("訊息已成功廣播到 LINE！")
+            # 真正執行廣播
+            # line_bot_api.broadcast(messages=final_messages_to_send)
+            # logger.info("訊息已成功廣播到 LINE！")
+            
+            # 測試階段：先打印出來，確認無誤後再取消註解上面的廣播行
+            logger.info("***** 測試模式：以下為準備廣播的訊息，實際廣播已註解 *****")
+            for i, msg in enumerate(final_messages_to_send):
+                if isinstance(msg, TextSendMessage):
+                    print(f"\n--- 測試訊息 #{i+1} (文字) ---\n{msg.text}\n---------------------------\n")
+                elif isinstance(msg, ImageSendMessage):
+                    print(f"\n--- 測試訊息 #{i+1} (圖片) ---\nOriginal URL: {msg.original_content_url}\nPreview URL: {msg.preview_image_url}\n---------------------------\n")
+            logger.info("***** 測試模式：訊息打印完畢 *****")
+
+
         except Exception as e:
             logger.critical(f"廣播訊息到 LINE 失敗: {e}", exc_info=True)
     else:
-        # 雖然 get_daily_message_from_gemini_with_retry 應該總會返回列表，但以防萬一
-        logger.critical("CRITICAL_ERROR: 從 Gemini 獲取訊息後，final_messages_to_send 為空或 None，此情況不應發生。")
+        logger.critical("CRITICAL_ERROR: 從 Gemini 獲取訊息後，final_messages_to_send 為空或 None。")
 
     script_end_time = datetime.datetime.now(pytz.timezone('Asia/Kuala_Lumpur'))
     duration = script_end_time - script_start_time
