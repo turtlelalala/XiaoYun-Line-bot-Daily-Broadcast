@@ -101,7 +101,7 @@ def _is_image_relevant_for_food_by_gemini_sync(image_base64: str, english_food_t
         logger.error(f"Gemini 食物圖片相關性判斷時發生未知錯誤 (主題: {english_food_theme_query}): {e}", exc_info=True)
         return False
 
-def fetch_image_for_food_from_unsplash(english_food_theme_query: str, max_candidates_to_check: int = 5, unsplash_per_page: int = 10) -> tuple[str | None, str]:
+def fetch_image_for_food_from_unsplash(english_food_theme_query: str, max_candidates_to_check: int = 10, unsplash_per_page: int = 10) -> tuple[str | None, str]:
     if not UNSPLASH_ACCESS_KEY:
         logger.warning("fetch_image_for_food_from_unsplash called but UNSPLASH_ACCESS_KEY is not set.")
         return None, english_food_theme_query
@@ -243,7 +243,7 @@ def get_weather_for_generic_location(api_key, lat=1.5755, lon=103.8225, lang="zh
             temp_float = weather_data["main"].get("temp")
             temp_str = f"{temp_float:.1f}°C" if temp_float is not None else "舒適的溫度"
             reaction = f"天氣是「{description}」，感覺很棒耶！最適合...在窗邊偷偷看著外面發生什麼事了喵！👀"
-            if temp_float is not None: # 只有在獲得有效溫度時才進行更細緻的判斷
+            if temp_float is not None: 
                 if "雨" in description or "rain" in description.lower() or "drizzle" in description.lower():
                     reaction = f"好像下著「{description}」耶...滴滴答答...如果不用出門，跟小雲一起躲在毯子裡聽雨聲好不好嘛...☔️"
                 elif "雲" in description or "cloud" in description.lower() and "晴" not in description:
@@ -312,45 +312,48 @@ def generate_gemini_daily_prompt_v4(current_date_str_formatted, current_solar_te
 *   **語言：** 繁體中文（台灣用語習慣）。
 *   **絕對避免：** 過於自信流利、複雜詞彙、主動挑釁或大聲喧嘩。
 ---
-**重要格式要求：**
+**重要格式要求 (請嚴格遵守)：**
 你的回應必須是一個**單一的 JSON 物件**，包含以下兩個 key：
 1.  `"main_text_content"`: (字串) 包含所有晨報的文字內容，使用 `\\n` (JSON中的換行符) 來分隔不同的部分。
 2.  `"lucky_food_image_keyword"`: (字串) 針對下方「小雲推薦・今日幸運食物」中你推薦的食物，提供一個**簡潔的、1-2 個單字的英文 Unsplash 搜尋關鍵字**。
 
-**晨報 "main_text_content" 的每一項內容，標題後緊接著一個簡短的小總結 (可包含Emoji)，然後換行開始解釋，解釋內容【最多只能有兩句話，且每句話盡量簡短】。請多使用 Emoji 增加易讀性。**
+**晨報 "main_text_content" 的每一項內容，結構如下：**
+**【標題 Emoji】：標題文字｜簡短小總結 (可包含Emoji)**
+**「小雲的感想/解釋，這裡的文字內容【絕對不可以超過兩句話】，並且每句話都要【非常簡短】，充滿小雲害羞、可愛、貓咪的口吻。」**
+請多使用 Emoji 增加易讀性。換行要自然。
 
 晨報的 "main_text_content" 內文必須嚴格包含以下部分，並使用【】標示每個部分：
 
-【📅 小雲的日曆喵】：{current_date_str_formatted} 🗓️
-(小雲對日期的害羞感想，1句話，例如：「咪...時間小跑步，又來到新的一天了耶...（小爪子輕點空氣）」)
+【📅 小雲的日曆喵】：{current_date_str_formatted} 🗓️｜又是新的一天喵～
+「咪...時間小跑步，又來到新的一天了耶...（小爪子輕點空氣，有點期待又有點害羞）」
 
 【☁️ 今日天氣悄悄話】：{general_weather_info['weather_description']}｜🌡️{general_weather_info['temperature']}
-「{general_weather_info['xiaoyun_weather_reaction']}」(小雲對天氣的反應要非常害羞、膽小或充滿貓咪的好奇，最多2句簡短的話。例如：「哇...太陽公公今天好熱情喔！☀️ 小雲...小雲還是躲在窗簾後面偷偷看它好了...（只敢露出一隻小眼睛看）」)
+「{general_weather_info['xiaoyun_weather_reaction']}」(這段關於天氣的感想，請你扮演小雲，用非常害羞、膽小或充滿貓咪好奇的風格，寫出**最多2句非常簡短的話**。例如：「哇...太陽公公今天好熱情喔！☀️ 小雲...小雲還是躲在窗簾後面偷偷看它好了...（只敢露出一隻小眼睛看）」)
 
-【☀️ 今日節氣 (參考用)】：{current_solar_term_with_feeling.split(' (')[0]} 🌿
-「{current_solar_term_with_feeling.split(' (', 1)[1][:-1]}」(小雲對節氣的感想，最多2句，要非常害羞和可愛，例如：「這是什麼呀？喵嗚...？是新的逗貓棒玩具嗎？還是可以躲貓貓的地方呢？（歪頭，充滿問號）」)
+【☀️ 今日節氣 (參考用)】：{current_solar_term_with_feeling.split(' (')[0]} 🌿｜聽起來好像很有趣？
+「{current_solar_term_with_feeling.split(' (', 1)[1][:-1]}」(這段關於節氣的感想，請你扮演小雲，用非常害羞和可愛的風格，寫出**最多2句非常簡短的話**，表達貓咪的困惑或好奇。例如：「這是什麼呀？喵嗚...？是新的逗貓棒玩具嗎？還是可以躲貓貓的地方呢？（歪頭，充滿問號）」)
 
 --- 🐾 ---
 
 【😼 小雲的貓貓運勢 (小聲說...純屬娛樂喔！)】：
     -   今日貓貓吉事 ✨：{random.choice(CAT_LUCK_GOOD).split('！')[0]}！
-        (小雲害羞地補充，1-2句，例如：「嘿嘿...小雲今天好像...運氣會特別好耶！可能會撿到亮晶晶的東西喔...（眼睛發亮）」)
+        「(小雲害羞地補充，1-2句非常簡短的話，例如：「嘿嘿...小雲今天好像...運氣會特別好耶！可能會撿到亮晶晶的東西喔...（眼睛發亮）」)」
     -   今日貓貓注意 ⚠️：{random.choice(CAT_LUCK_BAD).split('！')[0]}！
-        (小雲緊張地提醒，1-2句，例如：「不過...不過也要小心腳邊喔...才不會像小雲一樣，不小心踢到自己的飯碗啦...喵嗚...<(_ _)>」)
+        「(小雲緊張地提醒，1-2句非常簡短的話，例如：「不過...不過也要小心腳邊喔...才不會像小雲一樣，不小心踢到自己的飯碗啦...喵嗚...<(_ _)>」)」
 
 【📝 小雲的貓貓今日建議 (聽聽就好啦～)】：
     -   貓貓今日宜 👍：{random.choice(CAT_DO).split('！')[0]}！
-        (小雲歪頭想了想，1-2句，例如：「小雲覺得...今天很適合這樣做耶！你...你也試試看好不好嘛？咪～？」)
+        「(小雲歪頭想了想，1-2句非常簡短的話，例如：「小雲覺得...今天很適合這樣做耶！你...你也試試看好不好嘛？咪～？」)」
     -   貓貓今日忌 👎：{random.choice(CAT_DONT).split('！')[0]}！
-        (小雲皺鼻子小聲說，1-2句，例如：「還有還有...這個今天可能...先不要比較好喔...不然...小雲會有點小擔心的...(´･ω･`)」)
+        「(小雲皺鼻子小聲說，1-2句非常簡短的話，例如：「還有還有...這個今天可能...先不要比較好喔...不然...小雲會有點小擔心的...(´･ω･`)」)」
 
 --- 🌟 今日幸運能量補給！🌟 ---
 
-【💖 小雲推薦・今日幸運食物】：[請你扮演害羞的小雲，為人類推薦一樣今天的“幸運食物”。食物要是常見的，例如水果、小點心、主食、簡單飲品等。推薦理由必須非常符合小雲的貓咪視角、害羞、溫和又帶點天真的個性，並包含對人類的可愛祝福。**嚴格限制在2句簡短的話內。** 例如：「咪...小雲覺得...今天可以吃一顆亮晶晶的**蘋果**喔！🍎 吃下去，今天會不會也像蘋果一樣，圓圓滿滿，充滿好運呀？希望你今天也事事順利！✨」]
+【💖 小雲推薦・今日幸運食物】：[請你扮演害羞的小雲，為人類推薦一樣今天的“幸運食物”(常見食物)。推薦理由必須非常符合小雲的貓咪視角、害羞、溫和又帶點天真的個性，並包含對人類的可愛祝福。**嚴格限制在2句非常簡短的話內。** 例如：「咪...小雲覺得...今天可以吃一顆亮晶晶的**蘋果**喔！🍎 吃下去，今天會不會也像蘋果一樣，圓圓滿滿，充滿好運呀？希望你今天也事事順利！✨」]
 
 【💡 小雲給你的今日小建議 (人類參考用～)】：
-    -   今天宜：[為人類想一個簡單、溫馨的「宜」做事項，1-2句，符合小雲溫和風格。例如：「泡一杯香香的熱茶，然後找個安靜的角落，聽聽小鳥唱歌～小雲也喜歡聽喔！🎶」]
-    -   今天忌：[為人類想一個溫馨的「忌」提醒，1-2句，不要太嚴肅。例如：「把所有事情都自己扛著喔...小雲如果累了，都會找個小被被躲起來的！你也要好好愛自己～💖」]
+    -   今天宜：[為人類想一個簡單、溫馨的「宜」做事項，**嚴格限制在2句非常簡短的話內**，符合小雲溫和風格。例如：「泡一杯香香的熱茶，然後找個安靜的角落，聽聽小鳥唱歌～小雲也喜歡聽喔！🎶」]
+    -   今天忌：[為人類想一個溫馨的「忌」提醒，**嚴格限制在2句非常簡短的話內**，不要太嚴肅。例如：「把所有事情都自己扛著喔...小雲如果累了，都會找個小被被躲起來的！你也要好好愛自己～💖」]
 
 【🤔 小雲的貓貓哲學 (每日一句，不一定對啦～)】：[從`XIAOYUN_PHILOSOPHY_IDEAS`中選一句或創造一句全新的、**非常簡短(嚴格一句話就好)**、充滿貓咪視角又帶點害羞或天真哲理的話。例如：「小雲在想...是不是只要罐罐的聲音夠大，全世界的貓咪都會衝過來呢？<ฅ●ω●ฅ>」]
 
@@ -361,17 +364,13 @@ def generate_gemini_daily_prompt_v4(current_date_str_formatted, current_solar_te
 請直接輸出包含 "main_text_content" 和 "lucky_food_image_keyword" 的 JSON 物件，不要包含 "```json" 或 "```" 這些 markdown 標記。
 例如:
 `{{
-  "main_text_content": "【📅 小雲的日曆喵】：2023年10月27日 星期五 🗓️\\n咪...時間小跑步，又來到新的一天了耶...（小爪子輕點空氣）\\n\\n【☁️ 今日天氣悄悄話】：晴朗｜🌡️28°C\\n「哇...太陽公公今天好熱情喔！☀️ 小雲...小雲還是躲在窗簾後面偷偷看它好了...（只敢露出一隻小眼睛看）」\\n...",
+  "main_text_content": "【📅 小雲的日曆喵】：2023年10月27日 星期五 🗓️｜又是新的一天喵～\\n「咪...時間小跑步，又來到新的一天了耶...（小爪子輕點空氣，有點期待又有點害羞）」\\n\\n【☁️ 今日天氣悄悄話】：晴朗｜🌡️28°C\\n「哇...太陽公公今天好熱情喔！☀️ 小雲...小雲還是躲在窗簾後面偷偷看它好了...（只敢露出一隻小眼睛看）」\\n...",
   "lucky_food_image_keyword": "apple"
 }}`
 """
     return prompt
 
 # --- Gemini API 呼叫與訊息處理 ---
-# get_daily_message_from_gemini_with_retry 函數保持與你提供的版本一致，
-# 確保它調用的是 generate_gemini_daily_prompt_v4 (如果你重命名了)
-# 並且解析 JSON 的邏輯是正確的。
-# (以下省略 get_daily_message_from_gemini_with_retry 的重複程式碼，假設它已是最新版本)
 def get_daily_message_from_gemini_with_retry(max_retries=3, initial_retry_delay=10):
     logger.info("開始從 Gemini 獲取每日訊息內容...")
     target_location_timezone = 'Asia/Kuala_Lumpur'
@@ -388,7 +387,7 @@ def get_daily_message_from_gemini_with_retry(max_retries=3, initial_retry_delay=
     )
     current_solar_term_with_feeling = get_current_solar_term_with_feeling(current_target_loc_dt)
 
-    # *** 確保調用的是更新後的 Prompt 生成函數 ***
+    # *** 調用的是更新後的 Prompt 生成函數 ***
     prompt_to_gemini = generate_gemini_daily_prompt_v4(
         current_date_str_formatted,
         current_solar_term_with_feeling,
@@ -400,8 +399,8 @@ def get_daily_message_from_gemini_with_retry(max_retries=3, initial_retry_delay=
     payload = {
         "contents": [{"role": "user", "parts": [{"text": prompt_to_gemini}]}],
         "generationConfig": {
-            "temperature": 0.85, # 可以稍微降低一點溫度，看是否能更好地控制長度
-            "maxOutputTokens": 3000, # 保持足夠的 Token
+            "temperature": 0.8, # 稍微降低溫度，看是否能更好地控制長度
+            "maxOutputTokens": 3000, # 保持足夠的 Token 以防萬一，但期望輸出更短
             "response_mime_type": "application/json"
         }
     }
@@ -524,8 +523,8 @@ def get_daily_message_from_gemini_with_retry(max_retries=3, initial_retry_delay=
         logger.info(f"檢測到幸運食物圖片關鍵字: '{lucky_food_keyword_for_image}'，嘗試從 Unsplash 獲取圖片...")
         image_url, _ = fetch_image_for_food_from_unsplash(
             lucky_food_keyword_for_image,
-            max_candidates_to_check=5,
-            unsplash_per_page=10
+            max_candidates_to_check=10, # 修改了這裡
+            unsplash_per_page=10      # 修改了這裡
         )
         if image_url:
             messages_to_send.append(ImageSendMessage(original_content_url=image_url, preview_image_url=image_url))
