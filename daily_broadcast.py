@@ -24,13 +24,12 @@ LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 OPENWEATHERMAP_API_KEY = os.getenv("OPENWEATHERMAP_API_KEY")
 UNSPLASH_ACCESS_KEY = os.getenv("UNSPLASH_ACCESS_KEY")
-PEXELS_API_KEY = os.getenv("PEXELS_API_KEY") # 新增 Pexels API Key
+PEXELS_API_KEY = os.getenv("PEXELS_API_KEY")
 
 GEMINI_MODEL_NAME = "gemini-1.5-flash-latest"
 GEMINI_TEXT_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL_NAME}:generateContent"
 GEMINI_VISION_MODEL_NAME = "gemini-1.5-flash-latest"
 GEMINI_VISION_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_VISION_MODEL_NAME}:generateContent"
-
 
 # --- 全局初始化與檢查 ---
 critical_error_occurred = False
@@ -43,15 +42,12 @@ if not GEMINI_API_KEY:
 if not OPENWEATHERMAP_API_KEY:
     logger.critical("環境變數 OPENWEATHERMAP_API_KEY 未設定。")
     critical_error_occurred = True
-
-# Unsplash 和 Pexels Key 缺失是警告，不是致命錯誤
 if not UNSPLASH_ACCESS_KEY:
     logger.warning("環境變數 UNSPLASH_ACCESS_KEY 未設定，Unsplash 圖片功能將不可用。")
 if not PEXELS_API_KEY:
     logger.warning("環境變數 PEXELS_API_KEY 未設定，Pexels 圖片功能將不可用。")
 
-
-if critical_error_occurred: # 只檢查核心 API Keys
+if critical_error_occurred:
     logger.error("由於缺少核心 API Keys (LINE, Gemini, OpenWeatherMap)，腳本無法繼續執行。")
     exit(1)
 
@@ -62,9 +58,9 @@ except Exception as e:
     logger.critical(f"初始化 LineBotApi 失敗: {e}", exc_info=True)
     exit(1)
 
-# --- 圖片相關函數 (Gemini Vision 判斷函數不變) ---
+# --- 圖片相關函數 (與上一版相同，保持不變) ---
 def _is_image_relevant_for_food_by_gemini_sync(image_base64: str, english_food_theme_query: str, image_url_for_log: str = "N/A") -> bool:
-    # ... (這個函數的內容與之前相同，保持不變) ...
+    # ... (省略重複代碼，與你上一版本相同) ...
     logger.info(f"開始使用 Gemini Vision 判斷食物圖片相關性。英文主題: '{english_food_theme_query}', 圖片URL (日誌用): {image_url_for_log[:70]}...")
     prompt_parts = [
         "You are an AI assistant evaluating an image. The image is intended to accompany a 'lucky food' recommendation from a cute cat character. The image must clearly and appetizingly represent the recommended food item. Critically, it should NOT contain any cats, other animals, or human figures/faces.",
@@ -108,9 +104,8 @@ def _is_image_relevant_for_food_by_gemini_sync(image_base64: str, english_food_t
         logger.error(f"Gemini 食物圖片相關性判斷時發生未知錯誤 (主題: {english_food_theme_query}): {e}", exc_info=True)
         return False
 
-# --- Unsplash 圖片獲取函數 (與之前相同) ---
 def fetch_image_for_food_from_unsplash(english_food_theme_query: str, max_candidates_to_check: int = 10, unsplash_per_page: int = 10) -> tuple[str | None, str]:
-    # ... (這個函數的內容與之前相同，保持不變) ...
+    # ... (省略重複代碼，與你上一版本相同) ...
     if not UNSPLASH_ACCESS_KEY:
         logger.warning("fetch_image_for_food_from_unsplash called but UNSPLASH_ACCESS_KEY is not set.")
         return None, english_food_theme_query
@@ -193,9 +188,8 @@ def fetch_image_for_food_from_unsplash(english_food_theme_query: str, max_candid
     logger.warning(f"最終未能找到與食物主題 '{english_food_theme_query}' 高度相關的圖片。")
     return None, english_food_theme_query
 
-
-# --- 新增：Pexels 圖片獲取函數 ---
 def fetch_image_for_food_from_pexels(english_food_theme_query: str, max_candidates_to_check: int = 10, pexels_per_page: int = 10) -> tuple[str | None, str]:
+    # ... (省略重複代碼，與你上一版本相同) ...
     if not PEXELS_API_KEY:
         logger.warning("fetch_image_for_food_from_pexels called but PEXELS_API_KEY is not set.")
         return None, english_food_theme_query
@@ -207,10 +201,10 @@ def fetch_image_for_food_from_pexels(english_food_theme_query: str, max_candidat
     api_url_search = "https://api.pexels.com/v1/search"
     headers = {"Authorization": PEXELS_API_KEY}
     params_search = {
-        "query": english_food_theme_query + " food", # Pexels 搜尋可能不需要 "closeup"
+        "query": english_food_theme_query + " food", 
         "page": 1,
         "per_page": pexels_per_page,
-        "orientation": "squarish" # Pexels 支持 'landscape', 'portrait', 'square'
+        "orientation": "squarish" 
     }
     try:
         response_search = requests.get(api_url_search, headers=headers, params=params_search, timeout=20)
@@ -223,17 +217,13 @@ def fetch_image_for_food_from_pexels(english_food_theme_query: str, max_candidat
                 if checked_count >= max_candidates_to_check:
                     logger.info(f"已達到 Pexels 食物圖片 Gemini 檢查上限 ({max_candidates_to_check}) for theme '{english_food_theme_query}'.")
                     break
-                
-                # Pexels 返回的圖片 URL 在 'src' 對象中，'original' 或 'large'/'medium'
-                potential_image_url = photo_data.get("src", {}).get("large") # 或者 'medium' or 'original'
+                potential_image_url = photo_data.get("src", {}).get("large") 
                 if not potential_image_url:
                     logger.warning(f"Pexels 食物圖片數據中 'src.large' URL 為空。ID: {photo_data.get('id','N/A')}")
                     continue
-
-                alt_description = photo_data.get("alt", "N/A") # Pexels 用 'alt'
+                alt_description = photo_data.get("alt", "N/A") 
                 photographer = photo_data.get("photographer", "Unknown")
                 logger.info(f"從 Pexels 獲取到待驗證食物圖片 URL: {potential_image_url} (Alt: {alt_description}, Photographer: {photographer}) for theme '{english_food_theme_query}'")
-
                 try:
                     image_response = requests.get(potential_image_url, timeout=15, stream=True)
                     image_response.raise_for_status()
@@ -245,7 +235,6 @@ def fetch_image_for_food_from_pexels(english_food_theme_query: str, max_candidat
                     if len(image_bytes) > 4 * 1024 * 1024:
                         logger.warning(f"Pexels 食物圖片 {potential_image_url} 下載後發現過大 ({len(image_bytes)} bytes)，跳過。")
                         continue
-                    
                     image_base64 = base64.b64encode(image_bytes).decode('utf-8')
                     checked_count += 1
                     if _is_image_relevant_for_food_by_gemini_sync(image_base64, english_food_theme_query, potential_image_url):
@@ -257,25 +246,21 @@ def fetch_image_for_food_from_pexels(english_food_theme_query: str, max_candidat
                     logger.error(f"下載或處理 Pexels 食物圖片 {potential_image_url} 失敗: {img_req_err}")
                 except Exception as img_err:
                     logger.error(f"處理 Pexels 食物圖片 {potential_image_url} 時發生未知錯誤: {img_err}", exc_info=True)
-            
             logger.warning(f"遍歷了 {len(data_search.get('photos',[]))} 張 Pexels 食物圖片（實際檢查 {checked_count} 張），未找到 Gemini 認為相關的圖片 for theme '{english_food_theme_query}'.")
         else:
             logger.warning(f"Pexels 食物搜尋 '{english_food_theme_query}' 無結果或格式錯誤。 Response: {data_search}")
-
     except requests.exceptions.Timeout:
         logger.error(f"Pexels API 食物搜尋請求超時 (搜尋: '{english_food_theme_query}')")
     except requests.exceptions.RequestException as e:
         logger.error(f"Pexels API 食物搜尋請求失敗 (搜尋: '{english_food_theme_query}'): {e}")
     except Exception as e:
         logger.error(f"fetch_image_for_food_from_pexels 發生未知錯誤 (搜尋: '{english_food_theme_query}'): {e}", exc_info=True)
-
     logger.warning(f"最終未能從 Pexels 找到與食物主題 '{english_food_theme_query}' 高度相關的圖片。")
     return None, english_food_theme_query
 
-
-# --- (日期、節氣、通用天氣函數、Gemini Prompt V4 生成函數保持不變 - 請參考你上一版本提供的程式碼) ---
-# --- 確保 generate_gemini_daily_prompt_v4 是你最新調整過強調簡短的版本 ---
+# --- 日期、節氣、通用天氣函數 ---
 def get_current_datetime_for_location(timezone_str='Asia/Kuala_Lumpur'):
+    # ... (省略重複代碼)
     try:
         target_tz = pytz.timezone(timezone_str)
         return datetime.datetime.now(target_tz)
@@ -284,6 +269,7 @@ def get_current_datetime_for_location(timezone_str='Asia/Kuala_Lumpur'):
         return datetime.datetime.now(pytz.utc)
 
 def format_date_and_day(datetime_obj):
+    # ... (省略重複代碼)
     date_str = datetime_obj.strftime("%Y年%m月%d日")
     days = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]
     return f"{date_str} {days[datetime_obj.weekday()]}"
@@ -303,15 +289,28 @@ SOLAR_TERMS_DATA = {
     (1, 5): "小寒 (天氣冷颼颼的，小雲只想跟暖爐當好朋友 🔥)", (1, 20): "大寒 (一年中最冷的時候！大家都要穿暖暖，小雲也要多蓋一層小被被！🥶)"
 }
 def get_current_solar_term_with_feeling(datetime_obj):
+    # ... (省略重複代碼 - 使用修正後的版本) ...
     month = datetime_obj.month
     day = datetime_obj.day
-    for (m, d_start), term_info in SOLAR_TERMS_DATA.items():
-        d_end = d_start + 1
-        if month == m and (d_start <= day <= d_end):
-            return term_info
+    for days_offset in range(15): 
+        check_day = day - days_offset
+        current_month = month
+        # 處理跨月份的回溯 (簡化版)
+        if check_day < 1:
+            # 獲取上個月的最後一天
+            prev_month_date = datetime_obj.replace(day=1) - datetime.timedelta(days=1)
+            current_month = prev_month_date.month
+            check_day = prev_month_date.day + check_day # check_day 此時是負數或0
+        
+        if (current_month, check_day) in SOLAR_TERMS_DATA:
+            return SOLAR_TERMS_DATA[(current_month, check_day)]
+            
+    logger.warning(f"未能精確匹配到節氣 for {month}/{day}，返回通用描述。")
     return "一個神秘又美好的日子 (小雲覺得今天空氣裡有香香甜甜的味道！可能會發生很棒的事喔～✨)"
 
-def get_weather_for_generic_location(api_key, lat=1.5755, lon=103.8225, lang="zh_tw", units="metric"):
+
+def get_weather_for_generic_location(api_key, lat=35.6895, lon=139.6917, lang="zh_tw", units="metric"):
+    # ... (省略重複代碼，與你上一版本相同) ...
     location_name_display = "你那裡"
     weather_url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={api_key}&units={units}&lang={lang}"
     default_weather_info = {
@@ -355,42 +354,10 @@ def get_weather_for_generic_location(api_key, lat=1.5755, lon=103.8225, lang="zh
         logger.error(f"獲取通用地點天氣失敗: {e}", exc_info=True)
         return default_weather_info
 
-def generate_gemini_daily_prompt_v4(current_date_str_formatted, current_solar_term_with_feeling, general_weather_info):
-    # ... (這個函數的內容與你上一版提供的 generate_gemini_daily_prompt_v4 相同，保持不變) ...
-    CAT_LUCK_GOOD = [
-        "偷偷多睡了一個小時，還做了個吃到好多好多小魚乾的夢！🐟💤", "發現窗邊停了一隻特別漂亮的小蝴蝶，小雲跟它對看了好久...🦋",
-        "人類今天心情好像特別好，摸摸小雲下巴的時候特別溫柔～呼嚕嚕～🥰", "成功把自己塞進一個比上次小一點點的紙箱裡！挑戰成功！📦",
-        "在追逐一顆小紙球的時候，不小心使出了超級帥氣的空中轉體！(自己都嚇一跳！)", "在最喜歡的小被被上踩奶踩得超開心！🐾",
-        "追著自己的尾巴轉圈圈，好好玩喔！🌀", "打了一個超級滿足的哈欠，眼淚都流出來了～🥱"
-    ]
-    CAT_LUCK_BAD = [
-        "尾巴不小心被門夾到一點點，嚇了小雲一大跳！힝...🐾", "家裡那個會動來動去的吸塵器怪獸今天好像特別有精神...小雲躲得遠遠的...😨",
-        "想喝水的時候發現水碗空空的...喵嗚...（發出可憐的聲音）💧", "人類好像在吃什麼香噴噴的東西，但是沒有分給小雲...（偷偷觀察，有點小委屈）🥺",
-        "在舔毛的時候，不小心把一小撮毛吞下去了...咳咳...呃...", "想跳到窗台上結果沒跳好，差點摔個貓吃屎...還好沒人看到糗樣...😅",
-        "夢到罐罐被搶走了，嚇醒！還好只是夢...呼...", "梳毛的時候梳到打結的地方，痛痛！😾"
-    ]
-    CAT_DO = [
-        "找一個最最最舒服的小角落，把自己捲成一顆完美的貓貓球，然後呼呼大睡一整天！😴", "用充滿好奇的大眼睛，仔細觀察窗外飛過的小鳥、飄落的葉子，還有路過的人類～🧐",
-        "練習一下「瞬間移動」的技能！咻～的一下從沙發底下跑到床底下！(其實只是跑很快啦)", "對著家裡最大片的窗戶，曬一個暖烘烘的日光浴，把自己曬成金黃色的（咦？小雲是黑白的耶...那...那就曬成更有光澤的黑白色！✨）☀️",
-        "如果人類在家，就偷偷跟在他後面，看看他在做什麼神秘的事情～🐾 (但不要被發現喔！)", "躲在窗簾後面，偷偷觀察家裡發生的一切，當個小小偵探！🕵️‍♂️",
-        "找個舒服的紙箱窩著，享受一個人的靜謐時光，順便磨爪爪！📦🐾", "對著鏡子裡的自己哈氣，看看誰比較兇！(結果是自己贏了！)"
-    ]
-    CAT_DONT = [
-        "試圖跟家裡的盆栽植物「溝通」，它們好像不太想理貓咪耶...🪴", "在人類剛打掃乾淨的地板上，故意用濕濕的腳腳踩來踩去...（雖然很好玩，但可能會被唸喔！）",
-        "把衛生紙當成彩帶一樣，從滾筒上全部拉～～～出來...（場面可能會很壯觀，但收拾起來很麻煩...）", "趁人類不注意，偷偷跳上廚房的流理台探險...（上面可能有危險的東西喔！）",
-        "一直喵喵叫，想引起人類的注意，結果人類戴上了耳機...（小雲的叫聲輸給了音樂...嗚...）", "把人類重要的文件當成貓抓板 (雖然抓起來感覺不錯，但後果可能很嚴重...)",
-        "在人類剛洗好的衣服上踩來踩去 (雖然很軟，但可能會留下梅花腳印🐾)", "半夜在家裡開運動會，發出咚咚咚的聲音 (人類可能會睡不好喔...噓...)"
-    ]
-    XIAOYUN_PHILOSOPHY_IDEAS = [
-        "人生...啊不對，貓生最重要的，好像就是找到一個溫暖的膝蓋，然後呼嚕嚕地睡著吧...咪...😴", "小雲覺得呀，罐罐就像是貓咪的彩虹，每次打開都充滿了驚喜和期待！🌈🐟",
-        "偷偷告訴你喔...有時候，安靜地陪在喜歡的人身邊，什麼都不做，就是最幸福的事了...（小聲）❤️", "就算是小小的紙箱，也能裝下大大的夢想喔！...像是夢到吃不完的肉泥條之類的...📦✨",
-        "小雲在想...如果貓咪的呼嚕聲可以發電，那全世界都不會缺電了吧？呼嚕嚕～⚡️", "每天都要努力發現一點點新的小美好，比如窗邊灑進來的陽光，或者人類溫柔的摸摸～☀️🐾",
-        "有時候，最好的冒險，就是在一個熟悉的地方，找到一個全新的睡覺姿勢！💤", "小雲認為，最勇敢的貓咪，不是不怕吸塵器，而是明明很怕，但還是會偷偷探頭出來看一下下...👀",
-        "對這個世界永遠保持一點點的好奇心，就像小雲對那個會發光的小紅點一樣～🔴✨", "就算是看起來很平凡的一天，只要用心感受，也能找到很多小小的、亮晶晶的快樂喔！🌟",
-        "小雲的秘密是...被摸下巴的時候，會偷偷在心裡開小花～🌸😊", "下雨天的時候，聽著滴滴答答的聲音，好像全世界都變慢了...最適合思考貓生了...🌧️🤔",
-        "人類的腳步聲，是小雲最期待的音樂之一喔...（尤其是在晚餐時間！)", "最舒服的床，不一定是最大最軟的，而是充滿了安心味道的那一個～（像是你的舊毛衣）",
-        "小雲相信，只要閉上眼睛，用力許願，下一秒就會有小魚乾掉下來...（還在努力嘗試中！）"
-    ]
+# --- Gemini Prompt 生成 (V6 - 嚴格格式控制，提高內容自由度) ---
+def generate_gemini_daily_prompt_v6(current_date_str_formatted, current_solar_term_name, current_solar_term_feeling, general_weather_info):
+    # 由於貓貓運勢等內容要求每次不重樣且自由生成，這裡不再預設列表注入Prompt
+    # 而是在Prompt中直接要求Gemini創造
 
     prompt = f"""
 你現在扮演一隻叫做「小雲」的賓士公貓。
@@ -408,60 +375,62 @@ def generate_gemini_daily_prompt_v4(current_date_str_formatted, current_solar_te
 2.  `"lucky_food_image_keyword"`: (字串) 針對下方「小雲推薦・今日幸運食物」中你推薦的食物，提供一個**簡潔的、1-2 個單字的英文 Unsplash 搜尋關鍵字**。
 
 **晨報 "main_text_content" 的每一項內容，結構如下：**
-**【標題 Emoji】：標題文字｜簡短小總結 (可包含Emoji)**
-**「小雲的感想/解釋，這裡的文字內容【絕對不可以超過兩句話】，並且每句話都要【非常簡短】，充滿小雲害羞、可愛、貓咪的口吻。」**
-請多使用 Emoji 增加易讀性。換行要自然。
+**【標題 Emoji】：標題文字｜一個【單個詞或極短詞組】的小總結 (可加Emoji)**
+**「小雲的感想/解釋，這裡【絕對不可以超過兩句話】，且每句話都要【非常簡短】。」**
+請多使用 Emoji 增加易讀性。換行要自然。內容在符合小雲風格的前提下，盡量**每日變化，不要重複**。
 
 晨報的 "main_text_content" 內文必須嚴格包含以下部分，並使用【】標示每個部分：
 
-【📅 小雲的日曆喵】：{current_date_str_formatted} 🗓️｜又是新的一天喵～
+【📅 小雲的日曆喵】：{current_date_str_formatted} 🗓️｜新的一天～
 「咪...時間小跑步，又來到新的一天了耶...（小爪子輕點空氣，有點期待又有點害羞）」
 
-【☁️ 今日天氣悄悄話】：{general_weather_info['weather_description']}｜🌡️{general_weather_info['temperature']}
-「{general_weather_info['xiaoyun_weather_reaction']}」(這段關於天氣的感想，請你扮演小雲，用非常害羞、膽小或充滿貓咪好奇的風格，寫出**最多2句非常簡短的話**。例如：「哇...太陽公公今天好熱情喔！☀️ 小雲...小雲還是躲在窗簾後面偷偷看它好了...（只敢露出一隻小眼睛看）」)
+【☁️ 今日天氣悄悄話】：天氣預報｜{general_weather_info['weather_description']} 🌡️{general_weather_info['temperature']}
+「{general_weather_info['xiaoyun_weather_reaction']}」(小雲對天氣的反應，最多2句簡短的話。)
 
-【☀️ 今日節氣 (參考用)】：{current_solar_term_with_feeling.split(' (')[0]} 🌿｜聽起來好像很有趣？
-「{current_solar_term_with_feeling.split(' (', 1)[1][:-1]}」(這段關於節氣的感想，請你扮演小雲，用非常害羞和可愛的風格，寫出**最多2句非常簡短的話**，表達貓咪的困惑或好奇。例如：「這是什麼呀？喵嗚...？是新的逗貓棒玩具嗎？還是可以躲貓貓的地方呢？（歪頭，充滿問號）」)
+【☀️ 今日節氣 】：節氣報到｜{current_solar_term_name} 🌿
+「{current_solar_term_feeling}」(小雲對節氣的感想，最多2句簡短的話，表達貓咪的困惑或好奇。)
 
 --- 🐾 ---
 
-【😼 小雲的貓貓運勢 (小聲說...純屬娛樂喔！)】：
-    -   今日貓貓吉事 ✨：{random.choice(CAT_LUCK_GOOD).split('！')[0]}！
-        「(小雲害羞地補充，1-2句非常簡短的話，例如：「嘿嘿...小雲今天好像...運氣會特別好耶！可能會撿到亮晶晶的東西喔...（眼睛發亮）」)」
-    -   今日貓貓注意 ⚠️：{random.choice(CAT_LUCK_BAD).split('！')[0]}！
-        「(小雲緊張地提醒，1-2句非常簡短的話，例如：「不過...不過也要小心腳邊喔...才不會像小雲一樣，不小心踢到自己的飯碗啦...喵嗚...<(_ _)>」)」
+【😼 小雲的貓貓運勢 】
+    -   今日貓貓吉事 ✨：本日好運｜[請為小雲創造一個今天可能會發生的、非常簡短的【貓咪吉事小總結】(例如：發現新玩具🎾！ 或 被摸下巴摸到睡著😴！)]
+        「(小雲害羞地補充這件吉事，1-2句非常簡短的話，例如：「嘿嘿...小雲今天好像...運氣會特別好耶！可能會...（小聲）」)」
+    -   今日貓貓注意 ⚠️：本日注意｜[請為小雲創造一個今天可能要小心的、非常簡短的【貓咪注意小總結】(例如：小心吸塵器怪獸🤖！ 或 不要玩太瘋🐾！)]
+        「(小雲緊張地提醒這件注意事情，1-2句非常簡短的話，例如：「不過...不過也要特別小心一點點喔...才不會...（小聲）」)」
 
-【📝 小雲的貓貓今日建議 (聽聽就好啦～)】：
-    -   貓貓今日宜 👍：{random.choice(CAT_DO).split('！')[0]}！
-        「(小雲歪頭想了想，1-2句非常簡短的話，例如：「小雲覺得...今天很適合這樣做耶！你...你也試試看好不好嘛？咪～？」)」
-    -   貓貓今日忌 👎：{random.choice(CAT_DONT).split('！')[0]}！
-        「(小雲皺鼻子小聲說，1-2句非常簡短的話，例如：「還有還有...這個今天可能...先不要比較好喔...不然...小雲會有點小擔心的...(´･ω･`)」)」
+【📝 小雲的貓貓今日建議 】
+    -   貓貓今日宜 👍：今日推薦｜[請為小雲創造一個今天適合做的、非常簡短的【貓咪活動小總結】(例如：窗邊日光浴☀️！ 或 練習躲貓貓🫣！)]
+        「(小雲歪頭想了想，用1-2句非常簡短的話解釋為什麼推薦，例如：「小雲覺得...今天很適合這樣做耶！你...你也試試看好不好嘛？咪～？」)」
+    -   貓貓今日忌 👎：今日避免｜[請為小雲創造一個今天最好避免的、非常簡短的【貓咪活動小總結】(例如：挑戰大紙箱📦！ 或 偷吃人類食物😋！)]
+        「(小雲皺鼻子小聲說，用1-2句非常簡短的話解釋為什麼要避免，例如：「還有還有...這個今天可能...先不要比較好喔...不然...小雲會有點小擔心的...(´･ω･`)」)」
 
 --- 🌟 今日幸運能量補給！🌟 ---
 
-【💖 小雲推薦・今日幸運食物】：[請你扮演害羞的小雲，為人類推薦一樣今天的“幸運食物”(常見食物)。推薦理由必須非常符合小雲的貓咪視角、害羞、溫和又帶點天真的個性，並包含對人類的可愛祝福。**嚴格限制在2句非常簡短的話內。** 例如：「咪...小雲覺得...今天可以吃一顆亮晶晶的**蘋果**喔！🍎 吃下去，今天會不會也像蘋果一樣，圓圓滿滿，充滿好運呀？希望你今天也事事順利！✨」]
+【💖 小雲推薦・今日幸運食物】：幸運加持｜[請推薦一樣常見的幸運食物名稱，例如：一顆蘋果🍎 或 一杯牛奶🥛]
+「[請你扮演害羞的小雲，為人類推薦這一樣今天的“幸運食物”。推薦理由必須非常符合小雲的貓咪視角、害羞、溫和又帶點天真的個性，並包含對人類的可愛祝福。**嚴格限制在2句非常簡短的話內。**]」
 
-【💡 小雲給你的今日小建議 (人類參考用～)】：
-    -   今天宜：[為人類想一個簡單、溫馨的「宜」做事項，**嚴格限制在2句非常簡短的話內**，符合小雲溫和風格。例如：「泡一杯香香的熱茶，然後找個安靜的角落，聽聽小鳥唱歌～小雲也喜歡聽喔！🎶」]
-    -   今天忌：[為人類想一個溫馨的「忌」提醒，**嚴格限制在2句非常簡短的話內**，不要太嚴肅。例如：「把所有事情都自己扛著喔...小雲如果累了，都會找個小被被躲起來的！你也要好好愛自己～💖」]
+【💡 小雲給你的今日小建議 (人類參考用～)】
+    -   今天宜：生活小撇步｜[為人類想一個簡單、溫馨的「宜」做事項的【極短小總結】(例如：聽首輕音樂🎶 或 摸摸小動物🐾)]
+        「(用1-2句非常簡短的話解釋，符合小雲溫和風格。)」
+    -   今天忌：溫馨小提醒｜[為人類想一個溫馨的「忌」提醒的【極短小總結】(例如：煩惱太多事🤯 或 忘記微笑😊)]
+        「(用1-2句非常簡短的話解釋，不要太嚴肅。)」
 
-【🤔 小雲的貓貓哲學 (每日一句，不一定對啦～)】：[從`XIAOYUN_PHILOSOPHY_IDEAS`中選一句或創造一句全新的、**非常簡短(嚴格一句話就好)**、充滿貓咪視角又帶點害羞或天真哲理的話。例如：「小雲在想...是不是只要罐罐的聲音夠大，全世界的貓咪都會衝過來呢？<ฅ●ω●ฅ>」]
+【🤔 小雲的貓貓哲學 (每日一句，不一定對啦～)】：貓咪智慧｜每日一句
+「[請創造一句全新的、**非常簡短(嚴格一句話就好)**、充滿貓咪視角又帶點害羞或天真哲理的話。確保每次都不一樣。]」
 
 --- ✨ 今天的晨報結束囉 ✨ ---
 
-【😽 小雲想對你說...】：[最後，用小雲極度害羞又充滿期待的風格說一句簡短的(嚴格限制在2句內)、充滿關心的話。例如：「喵嗚...那個...今天的晨報...就到這裡了...希望你喜歡...（小聲）有空...有空要來找小雲玩喔...（期待的小眼神）」]
+【😽 小雲想對你說...】：悄悄話｜害羞的祝福❤️
+「(最後，用小雲極度害羞又充滿期待的風格說一句簡短的(嚴格限制在2句內)、充滿關心的話。)」
 
-請直接輸出包含 "main_text_content" 和 "lucky_food_image_keyword" 的 JSON 物件，不要包含 "```json" 或 "```" 這些 markdown 標記。
-例如:
-`{{
-  "main_text_content": "【📅 小雲的日曆喵】：2023年10月27日 星期五 🗓️｜又是新的一天喵～\\n「咪...時間小跑步，又來到新的一天了耶...（小爪子輕點空氣，有點期待又有點害羞）」\\n\\n【☁️ 今日天氣悄悄話】：晴朗｜🌡️28°C\\n「哇...太陽公公今天好熱情喔！☀️ 小雲...小雲還是躲在窗簾後面偷偷看它好了...（只敢露出一隻小眼睛看）」\\n...",
-  "lucky_food_image_keyword": "apple"
-}}`
+請直接輸出包含 "main_text_content" 和 "lucky_food_image_keyword" 的 JSON 物件，不要包含 "```json" 或 "```" 這些 markdown標記。
 """
     return prompt
 
 # --- Gemini API 呼叫與訊息處理 ---
 def get_daily_message_from_gemini_with_retry(max_retries=3, initial_retry_delay=10):
+    # ... (這部分的函數 get_daily_message_from_gemini_with_retry 與你上一版提供的程式碼相同，
+    #      只需確保它調用的是 generate_gemini_daily_prompt_v6（如果重命名了）) ...
     logger.info("開始從 Gemini 獲取每日訊息內容...")
     target_location_timezone = 'Asia/Kuala_Lumpur'
     generic_lat = 35.6895
@@ -475,11 +444,17 @@ def get_daily_message_from_gemini_with_retry(max_retries=3, initial_retry_delay=
         lat=generic_lat,
         lon=generic_lon
     )
-    current_solar_term_with_feeling = get_current_solar_term_with_feeling(current_target_loc_dt)
+    
+    # 修改 get_current_solar_term_with_feeling 的調用，分別獲取名稱和感想
+    solar_term_full_string = get_current_solar_term_with_feeling(current_target_loc_dt)
+    solar_term_name = solar_term_full_string.split(' (')[0]
+    solar_term_feeling = solar_term_full_string.split(' (', 1)[1][:-1] if ' (' in solar_term_full_string else "今天好像是個特別的日子呢！"
 
-    prompt_to_gemini = generate_gemini_daily_prompt_v4(
+
+    prompt_to_gemini = generate_gemini_daily_prompt_v6( # 改成 v6
         current_date_str_formatted,
-        current_solar_term_with_feeling,
+        solar_term_name, # 傳入節氣名稱
+        solar_term_feeling, # 傳入節氣感想
         general_weather_info
     )
 
@@ -488,7 +463,7 @@ def get_daily_message_from_gemini_with_retry(max_retries=3, initial_retry_delay=
     payload = {
         "contents": [{"role": "user", "parts": [{"text": prompt_to_gemini}]}],
         "generationConfig": {
-            "temperature": 0.8, 
+            "temperature": 0.85, # 保持一點創意性，同時兼顧格式
             "maxOutputTokens": 3000, 
             "response_mime_type": "application/json"
         }
@@ -609,19 +584,38 @@ def get_daily_message_from_gemini_with_retry(max_retries=3, initial_retry_delay=
         return messages_to_send
 
     if UNSPLASH_ACCESS_KEY and lucky_food_keyword_for_image and lucky_food_keyword_for_image.strip():
-        logger.info(f"檢測到幸運食物圖片關鍵字: '{lucky_food_keyword_for_image}'，嘗試從 Unsplash 獲取圖片...")
-        image_url, _ = fetch_image_for_food_from_unsplash(
+        logger.info(f"檢測到幸運食物圖片關鍵字: '{lucky_food_keyword_for_image}'，嘗試從 Unsplash 或 Pexels 獲取圖片...")
+        image_url, source_used = None, None
+        
+        logger.info("嘗試從 Unsplash 獲取圖片...")
+        unsplash_image_url, _ = fetch_image_for_food_from_unsplash(
             lucky_food_keyword_for_image,
             max_candidates_to_check=10, 
             unsplash_per_page=10      
         )
+        if unsplash_image_url:
+            image_url = unsplash_image_url
+            source_used = "Unsplash"
+        
+        if not image_url and PEXELS_API_KEY:
+            logger.info("Unsplash 未找到合適圖片，嘗試從 Pexels 獲取圖片...")
+            pexels_image_url, _ = fetch_image_for_food_from_pexels(
+                lucky_food_keyword_for_image,
+                max_candidates_to_check=10, 
+                pexels_per_page=10
+            )
+            if pexels_image_url:
+                image_url = pexels_image_url
+                source_used = "Pexels"
+
         if image_url:
             messages_to_send.append(ImageSendMessage(original_content_url=image_url, preview_image_url=image_url))
-            logger.info(f"成功獲取並驗證幸運食物圖片: {image_url}")
+            logger.info(f"成功從 {source_used} 獲取並驗證幸運食物圖片: {image_url}")
         else:
-            logger.warning(f"未能為關鍵字 '{lucky_food_keyword_for_image}' 找到合適的圖片 (已檢查最多 {10} 個候選)。本次將只發送文字訊息。")
-    elif not UNSPLASH_ACCESS_KEY:
-        logger.info("UNSPLASH_ACCESS_KEY 未設定，跳過幸運食物圖片獲取。")
+            logger.warning(f"未能從 Unsplash 或 Pexels 為關鍵字 '{lucky_food_keyword_for_image}' 找到合適的圖片。本次將只發送文字訊息。")
+            
+    elif not UNSPLASH_ACCESS_KEY and not PEXELS_API_KEY:
+        logger.info("Unsplash 和 Pexels API Key 均未設定，跳過幸運食物圖片獲取。")
     elif not lucky_food_keyword_for_image or not lucky_food_keyword_for_image.strip():
         logger.info("Gemini 未提供有效的幸運食物圖片關鍵字，跳過圖片獲取。")
         
