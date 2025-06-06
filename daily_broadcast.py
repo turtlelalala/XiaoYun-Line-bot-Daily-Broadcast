@@ -365,11 +365,11 @@ def generate_gemini_daily_prompt_v3(current_date_str_formatted, current_solar_te
     return prompt
 
 # --- Gemini API 呼叫與訊息處理 ---
-def get_daily_message_from_gemini_with_retry(max_retries=3, initial_retry_delay=10): # 增加重試次數和延遲
+def get_daily_message_from_gemini_with_retry(max_retries=3, initial_retry_delay=10):
     logger.info("開始從 Gemini 獲取每日訊息內容...")
     target_location_timezone = 'Asia/Kuala_Lumpur'
-    generic_lat = 35.6895 # 東京的緯度 (僅作天氣參考)
-    generic_lon = 139.6917 # 東京的經度
+    generic_lat = 35.6895
+    generic_lon = 139.6917
 
     current_target_loc_dt = get_current_datetime_for_location(target_location_timezone)
     current_date_str_formatted = format_date_and_day(current_target_loc_dt)
@@ -393,7 +393,7 @@ def get_daily_message_from_gemini_with_retry(max_retries=3, initial_retry_delay=
         "contents": [{"role": "user", "parts": [{"text": prompt_to_gemini}]}],
         "generationConfig": {
             "temperature": 0.9,
-            "maxOutputTokens": 3500, # 確保足夠的 Token
+            "maxOutputTokens": 3500,
             "response_mime_type": "application/json"
         }
     }
@@ -404,11 +404,10 @@ def get_daily_message_from_gemini_with_retry(max_retries=3, initial_retry_delay=
     for attempt in range(max_retries + 1):
         try:
             logger.info(f"Attempt {attempt + 1}/{max_retries + 1}: 向 Gemini API 發送請求獲取每日晨報內容...")
-            response = requests.post(gemini_url_with_key, headers=headers, json=payload, timeout=120) # 進一步增加超時
+            response = requests.post(gemini_url_with_key, headers=headers, json=payload, timeout=120)
             response.raise_for_status()
             
             content_data = None
-            # 優先嘗試直接解析整個回應為 JSON
             result_data = response.json()
             logger.debug(f"Attempt {attempt + 1}: Gemini API 原始回應 (已解析為JSON): {json.dumps(result_data, ensure_ascii=False, indent=2)}")
 
@@ -428,7 +427,7 @@ def get_daily_message_from_gemini_with_retry(max_retries=3, initial_retry_delay=
                         content_data = json.loads(json_string_from_text)
                     except json.JSONDecodeError as json_e:
                         logger.error(f"Attempt {attempt + 1}: 無法解析 'parts[0].text' 中的 JSON 字串: {json_e}")
-                        raise # 重新拋出異常，讓外層 try-except 捕獲並重試或處理
+                        raise 
                 else:
                     logger.error(f"Attempt {attempt + 1}: Gemini 'parts[0]' 的結構非預期: {part_data_container}")
                     raise ValueError("Gemini response 'parts[0]' structure unexpected.")
@@ -436,7 +435,6 @@ def get_daily_message_from_gemini_with_retry(max_retries=3, initial_retry_delay=
                  logger.error(f"Attempt {attempt + 1}: Gemini API 回應格式錯誤或無候選內容。")
                  raise ValueError("Gemini API response format error or no candidates.")
 
-            # 檢查提取的 content_data 是否符合預期
             if isinstance(content_data, dict) and \
                "main_text_content" in content_data and \
                "lucky_food_image_keyword" in content_data:
@@ -451,10 +449,10 @@ def get_daily_message_from_gemini_with_retry(max_retries=3, initial_retry_delay=
                         lucky_food_keyword_for_image = None
                     else:
                         time.sleep(initial_retry_delay * (2 ** attempt))
-                        continue # 重試
+                        continue 
                 
                 logger.info(f"成功從 Gemini 解析出每日訊息內容。幸運食物圖片關鍵字: '{lucky_food_keyword_for_image}'")
-                break # 成功獲取，跳出重試循環
+                break 
             else:
                 logger.error(f"Attempt {attempt + 1}: 解析後的 JSON 物件缺少必要 key 或格式不正確。 Parsed Data: {content_data}")
                 if attempt == max_retries:
@@ -465,9 +463,8 @@ def get_daily_message_from_gemini_with_retry(max_retries=3, initial_retry_delay=
             logger.error(f"Attempt {attempt + 1}: 請求 Gemini API 超時。")
             if attempt == max_retries:
                 generated_text_content = "喵嗚～小雲的秘密電波今天好像塞車了，晨報送不出來...下次再試試看！🚗💨"
-        except requests.exceptions.HTTPError as http_err: # 更具體地捕獲 HTTP 錯誤
+        except requests.exceptions.HTTPError as http_err:
             logger.error(f"Attempt {attempt + 1}: 請求 Gemini API 發生 HTTP 錯誤: {http_err}. Response: {http_err.response.text[:500] if http_err.response else 'No response text'}")
-            # 檢查是否有 promptFeedback (例如被 block)
             try:
                 error_details = http_err.response.json() if http_err.response else {}
                 feedback = error_details.get("promptFeedback", {})
@@ -478,26 +475,25 @@ def get_daily_message_from_gemini_with_retry(max_retries=3, initial_retry_delay=
                         generated_text_content = f"咪...小雲今天的晨報被一股神秘的力量 ({block_reason}) 緊緊地藏起來了！不給看！"
                 elif attempt == max_retries:
                      generated_text_content = "喵嗚～小雲的秘密電波好像被外星貓干擾了！晨報咻～一聲不見了！🛸👽"
-            except ValueError: # 如果 response.json() 解析失敗
+            except ValueError:
                 if attempt == max_retries:
                      generated_text_content = "喵嗚～小雲的秘密電波好像被外星貓干擾了！晨報咻～一聲不見了！🛸👽"
-
-        except requests.exceptions.RequestException as req_err: # 其他 requests 相關錯誤
+        except requests.exceptions.RequestException as req_err:
             logger.error(f"Attempt {attempt + 1}: 請求 Gemini API 失敗: {req_err}")
             if attempt == max_retries:
                 generated_text_content = "喵嗚～小雲的秘密電波好像秀逗了，晨報飛走了～💨"
-        except (json.JSONDecodeError, ValueError) as parse_err: # 捕獲解析錯誤和前面 raise 的 ValueError
+        except (json.JSONDecodeError, ValueError) as parse_err:
              logger.error(f"Attempt {attempt + 1}: 解析 Gemini 回應時發生錯誤: {parse_err}")
              if attempt == max_retries:
                 generated_text_content = f"喵嗚...小雲的晨報內容今天好像變成一團亂碼了...對不起喔... (錯誤細節請看日誌)"
-        except Exception as e: # 未知錯誤
+        except Exception as e:
             logger.error(f"Attempt {attempt + 1}: 處理 Gemini 回應時發生未知錯誤: {e}", exc_info=True)
             if attempt == max_retries:
                 generated_text_content = "咪！小雲的腦袋今天變成一團毛線球了！晨報也跟著打結了！🧶😵"
 
         if generated_text_content is not None and attempt < max_retries and lucky_food_keyword_for_image is not None:
-             pass # 如果已經成功，但不是最後一次嘗試 (雖然 break 了，但以防萬一)
-        elif attempt < max_retries: # 發生錯誤且還有重試機會
+             pass
+        elif attempt < max_retries:
             delay = initial_retry_delay * (2 ** attempt)
             logger.info(f"等待 {delay} 秒後重試...")
             time.sleep(delay)
@@ -552,19 +548,9 @@ if __name__ == "__main__":
                      logger.info(f"  訊息 #{i+1} (未知類型: {type(msg)})")
             
             # 真正執行廣播
-            # line_bot_api.broadcast(messages=final_messages_to_send)
-            # logger.info("訊息已成功廣播到 LINE！")
+            line_bot_api.broadcast(messages=final_messages_to_send)
+            logger.info("訊息已成功廣播到 LINE！")
             
-            # 測試階段：先打印出來，確認無誤後再取消註解上面的廣播行
-            logger.info("***** 測試模式：以下為準備廣播的訊息，實際廣播已註解 *****")
-            for i, msg in enumerate(final_messages_to_send):
-                if isinstance(msg, TextSendMessage):
-                    print(f"\n--- 測試訊息 #{i+1} (文字) ---\n{msg.text}\n---------------------------\n")
-                elif isinstance(msg, ImageSendMessage):
-                    print(f"\n--- 測試訊息 #{i+1} (圖片) ---\nOriginal URL: {msg.original_content_url}\nPreview URL: {msg.preview_image_url}\n---------------------------\n")
-            logger.info("***** 測試模式：訊息打印完畢 *****")
-
-
         except Exception as e:
             logger.critical(f"廣播訊息到 LINE 失敗: {e}", exc_info=True)
     else:
