@@ -5,13 +5,14 @@ import datetime
 import pytz
 import requests
 from linebot import LineBotApi
-# <<< START OF MODIFIED SECTION 1: Import QuickReply classes >>>
 from linebot.models import TextSendMessage, ImageSendMessage, QuickReply, QuickReplyButton, MessageAction
-# <<< END OF MODIFIED SECTION 1 >>>
 import json
 import time
 import logging
 import base64
+# <<< MODIFICATION START: Import warnings to handle DeprecationWarning >>>
+import warnings
+# <<< MODIFICATION END >>>
 
 # --- 配置日誌 ---
 logging.basicConfig(
@@ -20,6 +21,11 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 logger = logging.getLogger(__name__)
+
+# <<< MODIFICATION START: Suppress the specific DeprecationWarning from line-bot-sdk >>>
+# This will hide the "LineBotSdkDeprecatedIn30" warning and keep the log clean.
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+# <<< MODIFICATION END >>>
 
 # --- 環境變數 ---
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
@@ -361,7 +367,7 @@ def get_weather_for_generic_location(api_key, lat=35.6895, lon=139.6917, lang="z
         logger.error(f"獲取通用地點天氣失敗: {e}", exc_info=True)
         return default_weather_info
 
-# <<< START OF MODIFIED SECTION 2: New Prompt Function >>>
+# <<< MODIFICATION START: Renamed and updated the prompt generation function to v9 >>>
 def generate_gemini_daily_prompt_v9(current_date_str_formatted, current_solar_term_name, current_solar_term_feeling, general_weather_info):
     prompt = f"""
 你現在扮演一隻叫做「小雲」的賓士公貓。
@@ -449,16 +455,17 @@ def generate_gemini_daily_prompt_v9(current_date_str_formatted, current_solar_te
 
 **3. "daily_quest" 的內容 (請確保每日互動主題和文字都不同)：**
 --- 【每日任務靈感參考】(請勿直接抄襲，要創造全新的互動！) ---
-*   (問候型) greeting: "今天也要加油喔！(๑•̀ㅂ•́)و✧", task_prompt: "🐾 今天的小任務：跟小雲說聲早安吧！", buttons: [{label:"☀️ 小雲早安！", text:"小雲早安！"}, {label:"摸摸頭給予鼓勵", text:"（溫柔地摸摸小雲的頭）"}]
-*   (好奇型) greeting: "那個...可以問你一件事嗎？>///<", task_prompt: "🐾 今天的小任務：告訴小雲你今天的心情！", buttons: [{label:"😊 今天心情很好！", text:"我今天心情很好喔！"}, {label:"😥 有點累...", text:"今天覺得有點累..."}]
-*   (撒嬌型) greeting: "呼嚕嚕...小雲好像...有點想你了...", task_prompt: "🐾 今天的小任務：給小雲一點點回應嘛...", buttons: [{label:"❤️ 送一顆愛心給小雲", text:"我也想你！❤️"}, {label:"拍拍小雲", text:"（輕輕地拍拍小雲的背）"}]
-*   (玩樂型) greeting: "喵嗚！發現一個好玩的東西！", task_prompt: "🐾 今天的小任務：要不要跟小雲一起玩？", buttons: [{label:"⚽️ 丟球給小雲！", text:"（丟出一個白色小球）"}, {label:"✨ 拿出逗貓棒！", text:"（拿出羽毛逗貓棒晃了晃）"}]
+*   (問候型) greeting: "今天也要加油喔！(๑•̀ㅂ•́)و✧", task_prompt: "🐾 今天的小任務：跟小雲說聲早安吧！", buttons: [{{ "label":"☀️ 小雲早安！", "text":"小雲早安！"}}, {{ "label":"摸摸頭給予鼓勵", "text":"（溫柔地摸摸小雲的頭）"}}]
+*   (好奇型) greeting: "那個...可以問你一件事嗎？>///<", task_prompt: "🐾 今天的小任務：告訴小雲你今天的心情！", buttons: [{{ "label":"😊 今天心情很好！", "text":"我今天心情很好喔！"}}, {{ "label":"😥 有點累...", "text":"今天覺得有點累..."}}]
+*   (撒嬌型) greeting: "呼嚕嚕...小雲好像...有點想你了...", task_prompt: "🐾 今天的小任務：給小雲一點點回應嘛...", buttons: [{{ "label":"❤️ 送一顆愛心給小雲", "text":"我也想你！❤️"}}, {{ "label":"拍拍小雲", "text":"（輕輕地拍拍小雲的背）"}}]
+*   (玩樂型) greeting: "喵嗚！發現一個好玩的東西！", task_prompt: "🐾 今天的小任務：要不要跟小雲一起玩？", buttons: [{{ "label":"⚽️ 丟球給小雲！", "text":"（丟出一個白色小球）"}}, {{ "label":"✨ 拿出逗貓棒！", "text":"（拿出羽毛逗貓棒晃了晃）"}}]
 ---
 [請參考以上靈感，生成一組全新的 "daily_quest" JSON 物件。]
 """
     return prompt
+# <<< MODIFICATION END >>>
 
-# <<< START OF MODIFIED SECTION 3: Main logic function >>>
+# <<< MODIFICATION START: Updated main logic function >>>
 def get_daily_message_from_gemini_with_retry(max_retries=3, initial_retry_delay=10):
     logger.info("開始從 Gemini 獲取每日訊息內容...")
     target_location_timezone = 'Asia/Kuala_Lumpur'
@@ -478,7 +485,7 @@ def get_daily_message_from_gemini_with_retry(max_retries=3, initial_retry_delay=
     solar_term_name = solar_term_full_string.split(' (')[0]
     solar_term_feeling = solar_term_full_string.split(' (', 1)[1][:-1] if ' (' in solar_term_full_string else "今天好像是個特別的日子呢！"
 
-    prompt_to_gemini = generate_gemini_daily_prompt_v9( # 使用 v9 版本的 prompt
+    prompt_to_gemini = generate_gemini_daily_prompt_v9(
         current_date_str_formatted,
         solar_term_name,
         solar_term_feeling,
@@ -490,7 +497,7 @@ def get_daily_message_from_gemini_with_retry(max_retries=3, initial_retry_delay=
     payload = {
         "contents": [{"role": "user", "parts": [{"text": prompt_to_gemini}]}],
         "generationConfig": {
-            "temperature": 0.88, # 稍微再調高一點點，以增加隨機性和創意
+            "temperature": 0.88,
             "maxOutputTokens": 4000,
             "response_mime_type": "application/json"
         }
@@ -498,7 +505,7 @@ def get_daily_message_from_gemini_with_retry(max_retries=3, initial_retry_delay=
 
     generated_text_content = None
     lucky_food_keyword_for_image = None
-    daily_quest_data = None # 新增變數來存放每日任務資料
+    daily_quest_data = None
 
     for attempt in range(max_retries + 1):
         try:
@@ -509,11 +516,9 @@ def get_daily_message_from_gemini_with_retry(max_retries=3, initial_retry_delay=
             content_data = response.json()
             logger.debug(f"Attempt {attempt + 1}: Gemini API 原始回應 (已解析為JSON): {json.dumps(content_data, ensure_ascii=False, indent=2)}")
 
-            # 新的解析邏輯，直接從最外層解析
             if "candidates" in content_data and content_data["candidates"]:
                 part_data_container = content_data["candidates"][0]["content"]["parts"][0]
                 
-                # Gemini 可能會把 JSON 包在 "text" 裡，也可能直接返回物件
                 if "text" in part_data_container:
                      parsed_json = json.loads(part_data_container["text"])
                 else:
@@ -521,13 +526,13 @@ def get_daily_message_from_gemini_with_retry(max_retries=3, initial_retry_delay=
 
                 generated_text_content = parsed_json.get("main_text_content")
                 lucky_food_keyword_for_image = parsed_json.get("lucky_food_image_keyword", "").strip().lower()
-                daily_quest_data = parsed_json.get("daily_quest") # 獲取每日任務資料
+                daily_quest_data = parsed_json.get("daily_quest")
 
                 if not generated_text_content or not daily_quest_data:
                     raise ValueError("Gemini 回應中缺少 'main_text_content' 或 'daily_quest'。")
                 
                 logger.info(f"成功從 Gemini 解析出每日訊息內容。幸運食物圖片關鍵字: '{lucky_food_keyword_for_image}'")
-                break # 成功則跳出重試循環
+                break
             else:
                 raise ValueError("Gemini API 回應格式錯誤或無候選內容。")
 
@@ -549,16 +554,14 @@ def get_daily_message_from_gemini_with_retry(max_retries=3, initial_retry_delay=
         daily_quest_data = None
 
     messages_to_send = []
-    # 1. 添加主要的晨報文字內容
+    
     if generated_text_content:
         messages_to_send.append(TextSendMessage(text=generated_text_content))
         logger.info(f"主文字訊息已準備好...")
     else:
-        # 即使主內容失敗，也要有一個訊息
         messages_to_send.append(TextSendMessage(text="咪...小雲今天腦袋空空，晨報飛走了...對不起喔..."))
         return messages_to_send
 
-    # 2. 添加幸運食物圖片 (如果有的話)
     image_url, source_used = None, None
     if lucky_food_keyword_for_image:
         logger.info(f"檢測到幸運食物圖片關鍵字: '{lucky_food_keyword_for_image}'，嘗試從圖片服務獲取圖片...")
@@ -577,13 +580,12 @@ def get_daily_message_from_gemini_with_retry(max_retries=3, initial_retry_delay=
         else:
             logger.warning(f"未能為關鍵字 '{lucky_food_keyword_for_image}' 找到合適的圖片。")
 
-    # 3. 添加每日任務和 Quick Reply 按鈕
     if daily_quest_data and isinstance(daily_quest_data, dict):
         greeting = daily_quest_data.get("greeting", "今天也要加油喔！")
         task_prompt = daily_quest_data.get("task_prompt", "🐾 今天的小任務：跟小雲打個招呼吧！")
         buttons_data = daily_quest_data.get("buttons", [])
 
-        if buttons_data:
+        if buttons_data and len(buttons_data) > 0:
             quick_reply_items = []
             for btn in buttons_data:
                 label = btn.get("label", "...")
@@ -599,7 +601,6 @@ def get_daily_message_from_gemini_with_retry(max_retries=3, initial_retry_delay=
             )
             logger.info("已準備好帶有 Quick Reply 的每日任務訊息。")
         else:
-            # 如果沒有按鈕，就只發送問候語
             final_message_text = f"【😽 小雲想對你說... 】\n「{greeting}」"
             messages_to_send.append(TextSendMessage(text=final_message_text))
             logger.info("已準備好每日最終問候訊息 (無任務按鈕)。")
@@ -609,7 +610,7 @@ def get_daily_message_from_gemini_with_retry(max_retries=3, initial_retry_delay=
 
 
     return messages_to_send
-# <<< END OF MODIFIED SECTION 3 >>>
+# <<< MODIFICATION END >>>
 
 # --- 主執行 ---
 if __name__ == "__main__":
