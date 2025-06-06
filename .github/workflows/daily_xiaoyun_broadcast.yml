@@ -1,1 +1,36 @@
+name: Xiaoyun Daily Broadcast # Workflow 的名稱，會顯示在 Actions 分頁
 
+on: # 定義觸發 Workflow 的事件
+  schedule:
+    # 每天台灣時間早上 5 點執行
+    # GitHub Actions 的 cron 使用 UTC 時間。
+    # 台灣時間 (Asia/Taipei, UTC+8) 早上 5 點是 UTC 時間的前一天晚上 21:00。
+    # 分鐘 小時 日 月 星期幾
+    - cron: '0 21 * * *' # '0 21 * * *' 表示每天的 UTC 21:00 (台灣時間 隔天 05:00)
+  workflow_dispatch: # 允許手動從 Actions 分頁觸發，方便測試
+
+jobs: # 定義一個或多個要運行的作業
+  broadcast-daily-message: # Job 的 ID 和顯示名稱
+    runs-on: ubuntu-latest # 指定運行環境為最新的 Ubuntu
+    timeout-minutes: 10 # 設定 job 的最大執行時間 (分鐘)，防止無限運行
+
+    steps: # Job 中的步驟，會依序執行
+      - name: Checkout repository code # 步驟名稱
+        uses: actions/checkout@v4 # 使用官方的 checkout action 來拉取你的程式碼到虛擬環境
+
+      - name: Set up Python 3.10 # 步驟名稱
+        uses: actions/setup-python@v4 # 使用官方的 setup-python action
+        with:
+          python-version: '3.10' # 你可以指定你偏好的 Python 3.x 版本
+
+      - name: Install dependencies # 步驟名稱
+        run: | # 執行 shell 命令
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi # 檢查 requirements.txt 是否存在再安裝
+
+      - name: Run Xiaoyun's daily broadcast script # 步驟名稱
+        env: # 設定環境變數給 Python 腳本使用
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          # 如果你的 Python 腳本還需要其他環境變數，也請加在這裡
+        run: python daily_broadcast.py # 執行你的廣播腳本
