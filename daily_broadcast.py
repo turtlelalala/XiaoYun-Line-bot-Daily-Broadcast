@@ -24,6 +24,7 @@ LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 OPENWEATHERMAP_API_KEY = os.getenv("OPENWEATHERMAP_API_KEY")
 UNSPLASH_ACCESS_KEY = os.getenv("UNSPLASH_ACCESS_KEY")
+PEXELS_API_KEY = os.getenv("PEXELS_API_KEY") # 新增 Pexels API Key
 
 GEMINI_MODEL_NAME = "gemini-1.5-flash-latest"
 GEMINI_TEXT_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL_NAME}:generateContent"
@@ -42,11 +43,16 @@ if not GEMINI_API_KEY:
 if not OPENWEATHERMAP_API_KEY:
     logger.critical("環境變數 OPENWEATHERMAP_API_KEY 未設定。")
     critical_error_occurred = True
-if not UNSPLASH_ACCESS_KEY:
-    logger.warning("環境變數 UNSPLASH_ACCESS_KEY 未設定，幸運食物圖片功能將不可用。")
 
-if critical_error_occurred:
-    logger.error("由於缺少必要的 API Keys，腳本無法繼續執行。")
+# Unsplash 和 Pexels Key 缺失是警告，不是致命錯誤
+if not UNSPLASH_ACCESS_KEY:
+    logger.warning("環境變數 UNSPLASH_ACCESS_KEY 未設定，Unsplash 圖片功能將不可用。")
+if not PEXELS_API_KEY:
+    logger.warning("環境變數 PEXELS_API_KEY 未設定，Pexels 圖片功能將不可用。")
+
+
+if critical_error_occurred: # 只檢查核心 API Keys
+    logger.error("由於缺少核心 API Keys (LINE, Gemini, OpenWeatherMap)，腳本無法繼續執行。")
     exit(1)
 
 try:
@@ -56,8 +62,9 @@ except Exception as e:
     logger.critical(f"初始化 LineBotApi 失敗: {e}", exc_info=True)
     exit(1)
 
-# --- 圖片相關函數 ---
+# --- 圖片相關函數 (Gemini Vision 判斷函數不變) ---
 def _is_image_relevant_for_food_by_gemini_sync(image_base64: str, english_food_theme_query: str, image_url_for_log: str = "N/A") -> bool:
+    # ... (這個函數的內容與之前相同，保持不變) ...
     logger.info(f"開始使用 Gemini Vision 判斷食物圖片相關性。英文主題: '{english_food_theme_query}', 圖片URL (日誌用): {image_url_for_log[:70]}...")
     prompt_parts = [
         "You are an AI assistant evaluating an image. The image is intended to accompany a 'lucky food' recommendation from a cute cat character. The image must clearly and appetizingly represent the recommended food item. Critically, it should NOT contain any cats, other animals, or human figures/faces.",
@@ -101,7 +108,9 @@ def _is_image_relevant_for_food_by_gemini_sync(image_base64: str, english_food_t
         logger.error(f"Gemini 食物圖片相關性判斷時發生未知錯誤 (主題: {english_food_theme_query}): {e}", exc_info=True)
         return False
 
-def fetch_image_for_food_from_unsplash(english_food_theme_query: str, max_candidates_to_check: int = 10, unsplash_per_page: int = 10) -> tuple[str | None, str]: # max_candidates_to_check 已修改
+# --- Unsplash 圖片獲取函數 (與之前相同) ---
+def fetch_image_for_food_from_unsplash(english_food_theme_query: str, max_candidates_to_check: int = 10, unsplash_per_page: int = 10) -> tuple[str | None, str]:
+    # ... (這個函數的內容與之前相同，保持不變) ...
     if not UNSPLASH_ACCESS_KEY:
         logger.warning("fetch_image_for_food_from_unsplash called but UNSPLASH_ACCESS_KEY is not set.")
         return None, english_food_theme_query
@@ -118,7 +127,7 @@ def fetch_image_for_food_from_unsplash(english_food_theme_query: str, max_candid
     params_search = {
         "query": english_food_theme_query + " food closeup",
         "page": 1,
-        "per_page": unsplash_per_page, # 將獲取 unsplash_per_page 數量的圖片
+        "per_page": unsplash_per_page,
         "orientation": "squarish",
         "content_filter": "high",
         "order_by": "relevant",
@@ -132,10 +141,8 @@ def fetch_image_for_food_from_unsplash(english_food_theme_query: str, max_candid
 
         if data_search and data_search.get("results"):
             checked_count = 0
-            # 遍歷所有從 Unsplash 獲取的圖片 (最多 unsplash_per_page 張)
-            # 但 Gemini 檢查的上限由 max_candidates_to_check 控制
             for image_data in data_search["results"]:
-                if checked_count >= max_candidates_to_check: # 如果已檢查的圖片達到上限
+                if checked_count >= max_candidates_to_check:
                     logger.info(f"已達到食物圖片 Gemini 檢查上限 ({max_candidates_to_check}) for theme '{english_food_theme_query}'.")
                     break
                 potential_image_url = image_data.get("urls", {}).get("regular")
@@ -186,7 +193,88 @@ def fetch_image_for_food_from_unsplash(english_food_theme_query: str, max_candid
     logger.warning(f"最終未能找到與食物主題 '{english_food_theme_query}' 高度相關的圖片。")
     return None, english_food_theme_query
 
-# --- 日期、節氣、通用天氣函數 ---
+
+# --- 新增：Pexels 圖片獲取函數 ---
+def fetch_image_for_food_from_pexels(english_food_theme_query: str, max_candidates_to_check: int = 10, pexels_per_page: int = 10) -> tuple[str | None, str]:
+    if not PEXELS_API_KEY:
+        logger.warning("fetch_image_for_food_from_pexels called but PEXELS_API_KEY is not set.")
+        return None, english_food_theme_query
+    if not english_food_theme_query or not english_food_theme_query.strip():
+        logger.warning("fetch_image_for_food_from_pexels called with empty or blank food theme query.")
+        return None, "unspecified food"
+
+    logger.info(f"開始從 Pexels 搜尋食物圖片，英文主題: '{english_food_theme_query}'")
+    api_url_search = "https://api.pexels.com/v1/search"
+    headers = {"Authorization": PEXELS_API_KEY}
+    params_search = {
+        "query": english_food_theme_query + " food", # Pexels 搜尋可能不需要 "closeup"
+        "page": 1,
+        "per_page": pexels_per_page,
+        "orientation": "squarish" # Pexels 支持 'landscape', 'portrait', 'square'
+    }
+    try:
+        response_search = requests.get(api_url_search, headers=headers, params=params_search, timeout=20)
+        response_search.raise_for_status()
+        data_search = response_search.json()
+
+        if data_search and data_search.get("photos"):
+            checked_count = 0
+            for photo_data in data_search["photos"]:
+                if checked_count >= max_candidates_to_check:
+                    logger.info(f"已達到 Pexels 食物圖片 Gemini 檢查上限 ({max_candidates_to_check}) for theme '{english_food_theme_query}'.")
+                    break
+                
+                # Pexels 返回的圖片 URL 在 'src' 對象中，'original' 或 'large'/'medium'
+                potential_image_url = photo_data.get("src", {}).get("large") # 或者 'medium' or 'original'
+                if not potential_image_url:
+                    logger.warning(f"Pexels 食物圖片數據中 'src.large' URL 為空。ID: {photo_data.get('id','N/A')}")
+                    continue
+
+                alt_description = photo_data.get("alt", "N/A") # Pexels 用 'alt'
+                photographer = photo_data.get("photographer", "Unknown")
+                logger.info(f"從 Pexels 獲取到待驗證食物圖片 URL: {potential_image_url} (Alt: {alt_description}, Photographer: {photographer}) for theme '{english_food_theme_query}'")
+
+                try:
+                    image_response = requests.get(potential_image_url, timeout=15, stream=True)
+                    image_response.raise_for_status()
+                    content_type = image_response.headers.get('Content-Type', '')
+                    if not content_type.startswith('image/'):
+                        logger.warning(f"Pexels URL {potential_image_url} 返回的 Content-Type 不是圖片: {content_type}")
+                        continue
+                    image_bytes = image_response.content
+                    if len(image_bytes) > 4 * 1024 * 1024:
+                        logger.warning(f"Pexels 食物圖片 {potential_image_url} 下載後發現過大 ({len(image_bytes)} bytes)，跳過。")
+                        continue
+                    
+                    image_base64 = base64.b64encode(image_bytes).decode('utf-8')
+                    checked_count += 1
+                    if _is_image_relevant_for_food_by_gemini_sync(image_base64, english_food_theme_query, potential_image_url):
+                        logger.info(f"Gemini 認為 Pexels 食物圖片 {potential_image_url} 與主題 '{english_food_theme_query}' 相關。")
+                        return potential_image_url, english_food_theme_query
+                    else:
+                        logger.info(f"Gemini 認為 Pexels 食物圖片 {potential_image_url} 與主題 '{english_food_theme_query}' 不相關。")
+                except requests.exceptions.RequestException as img_req_err:
+                    logger.error(f"下載或處理 Pexels 食物圖片 {potential_image_url} 失敗: {img_req_err}")
+                except Exception as img_err:
+                    logger.error(f"處理 Pexels 食物圖片 {potential_image_url} 時發生未知錯誤: {img_err}", exc_info=True)
+            
+            logger.warning(f"遍歷了 {len(data_search.get('photos',[]))} 張 Pexels 食物圖片（實際檢查 {checked_count} 張），未找到 Gemini 認為相關的圖片 for theme '{english_food_theme_query}'.")
+        else:
+            logger.warning(f"Pexels 食物搜尋 '{english_food_theme_query}' 無結果或格式錯誤。 Response: {data_search}")
+
+    except requests.exceptions.Timeout:
+        logger.error(f"Pexels API 食物搜尋請求超時 (搜尋: '{english_food_theme_query}')")
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Pexels API 食物搜尋請求失敗 (搜尋: '{english_food_theme_query}'): {e}")
+    except Exception as e:
+        logger.error(f"fetch_image_for_food_from_pexels 發生未知錯誤 (搜尋: '{english_food_theme_query}'): {e}", exc_info=True)
+
+    logger.warning(f"最終未能從 Pexels 找到與食物主題 '{english_food_theme_query}' 高度相關的圖片。")
+    return None, english_food_theme_query
+
+
+# --- (日期、節氣、通用天氣函數、Gemini Prompt V4 生成函數保持不變 - 請參考你上一版本提供的程式碼) ---
+# --- 確保 generate_gemini_daily_prompt_v4 是你最新調整過強調簡短的版本 ---
 def get_current_datetime_for_location(timezone_str='Asia/Kuala_Lumpur'):
     try:
         target_tz = pytz.timezone(timezone_str)
@@ -267,8 +355,8 @@ def get_weather_for_generic_location(api_key, lat=1.5755, lon=103.8225, lang="zh
         logger.error(f"獲取通用地點天氣失敗: {e}", exc_info=True)
         return default_weather_info
 
-# --- Gemini Prompt 生成 (V4 - 強調簡短和兩句限制) ---
 def generate_gemini_daily_prompt_v4(current_date_str_formatted, current_solar_term_with_feeling, general_weather_info):
+    # ... (這個函數的內容與你上一版提供的 generate_gemini_daily_prompt_v4 相同，保持不變) ...
     CAT_LUCK_GOOD = [
         "偷偷多睡了一個小時，還做了個吃到好多好多小魚乾的夢！🐟💤", "發現窗邊停了一隻特別漂亮的小蝴蝶，小雲跟它對看了好久...🦋",
         "人類今天心情好像特別好，摸摸小雲下巴的時候特別溫柔～呼嚕嚕～🥰", "成功把自己塞進一個比上次小一點點的紙箱裡！挑戰成功！📦",
@@ -389,7 +477,6 @@ def get_daily_message_from_gemini_with_retry(max_retries=3, initial_retry_delay=
     )
     current_solar_term_with_feeling = get_current_solar_term_with_feeling(current_target_loc_dt)
 
-    # *** 調用的是更新後的 Prompt 生成函數 ***
     prompt_to_gemini = generate_gemini_daily_prompt_v4(
         current_date_str_formatted,
         current_solar_term_with_feeling,
@@ -401,8 +488,8 @@ def get_daily_message_from_gemini_with_retry(max_retries=3, initial_retry_delay=
     payload = {
         "contents": [{"role": "user", "parts": [{"text": prompt_to_gemini}]}],
         "generationConfig": {
-            "temperature": 0.8, # 稍微降低溫度，看是否能更好地控制長度
-            "maxOutputTokens": 3000, # 保持足夠的 Token 以防萬一，但期望輸出更短
+            "temperature": 0.8, 
+            "maxOutputTokens": 3000, 
             "response_mime_type": "application/json"
         }
     }
@@ -525,14 +612,14 @@ def get_daily_message_from_gemini_with_retry(max_retries=3, initial_retry_delay=
         logger.info(f"檢測到幸運食物圖片關鍵字: '{lucky_food_keyword_for_image}'，嘗試從 Unsplash 獲取圖片...")
         image_url, _ = fetch_image_for_food_from_unsplash(
             lucky_food_keyword_for_image,
-            max_candidates_to_check=10, # 修改了這裡，檢查所有獲取的圖片
-            unsplash_per_page=10      # 保持獲取10張
+            max_candidates_to_check=10, 
+            unsplash_per_page=10      
         )
         if image_url:
             messages_to_send.append(ImageSendMessage(original_content_url=image_url, preview_image_url=image_url))
             logger.info(f"成功獲取並驗證幸運食物圖片: {image_url}")
         else:
-            logger.warning(f"未能為關鍵字 '{lucky_food_keyword_for_image}' 找到合適的圖片 (已檢查最多 {10} 個候選)。本次將只發送文字訊息。") # 日誌也對應修改
+            logger.warning(f"未能為關鍵字 '{lucky_food_keyword_for_image}' 找到合適的圖片 (已檢查最多 {10} 個候選)。本次將只發送文字訊息。")
     elif not UNSPLASH_ACCESS_KEY:
         logger.info("UNSPLASH_ACCESS_KEY 未設定，跳過幸運食物圖片獲取。")
     elif not lucky_food_keyword_for_image or not lucky_food_keyword_for_image.strip():
