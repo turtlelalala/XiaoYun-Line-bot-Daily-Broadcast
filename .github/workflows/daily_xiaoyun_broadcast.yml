@@ -1,11 +1,13 @@
-# .github/workflows/daily_xiaoyun_broadcast.yml (v2.2 - 带有动态字体搜索)
+# .github/workflows/daily_xiaoyun_broadcast.yml (v2.3 - 終極動態字體偵察版)
 
 name: Xiaoyun Daily Broadcast
 
 on:
   schedule:
+    # 每天馬來西亞/新加坡/中國/台灣時間早上 5 點執行
+    # UTC+8 早上 5 點是 UTC 時間的前一天晚上 21:00
     - cron: '0 21 * * *'
-  workflow_dispatch:
+  workflow_dispatch: # 允許手動觸發
 
 jobs:
   broadcast-daily-message:
@@ -21,27 +23,38 @@ jobs:
         with:
           python-version: '3.10'
       
-      # 步驟 1: 安裝字體
       - name: Install Chinese Fonts
         run: |
           sudo apt-get update
           sudo apt-get install -y fonts-noto-cjk
-      
-      # <<< 新增的核心步驟：動態查找字體路徑 >>>
-      - name: Find Font Path and Set as Environment Variable
+
+      # <<< 終極核心步驟：動態偵察字體路徑 >>>
+      - name: Find Available Font Path and Set as Environment Variable
         id: find_font
         run: |
-          # 使用 find 命令在 /usr/share/fonts 中搜索字體檔案
-          # -name 指定檔案名，-print 打印路徑，-quit 找到第一個就退出
-          FONT_PATH=$(find /usr/share/fonts -name "NotoSansCJK-Regular.otf" -print -quit)
+          echo "Searching for available Noto CJK fonts in /usr/share/fonts..."
+          # 使用 find 命令在 /usr/share/fonts 中搜索任何 Noto CJK 字體檔案
+          # 我們優先尋找 .otf，如果沒有再找 .ttc
+          # -print -quit 表示找到第一個就退出
+          FONT_PATH=$(find /usr/share/fonts -name "NotoSansCJK*.otf" -print -quit)
+
+          # 如果沒找到 .otf，就嘗試尋找 .ttc
           if [ -z "$FONT_PATH" ]; then
-            echo "::error::Could not find NotoSansCJK-Regular.otf font file after installation."
-            # 也可以在這裡搜索其他備用字體
-            # FONT_PATH=$(find /usr/share/fonts -name "其他備用字體.ttf" -print -quit)
+            echo "No .otf font found, searching for .ttc fonts..."
+            FONT_PATH=$(find /usr/share/fonts -name "NotoSansCJK*.ttc" -print -quit)
+          fi
+          
+          # 如果兩種都沒找到，就報錯並終止流程
+          if [ -z "$FONT_PATH" ]; then
+            echo "::error::Could not find ANY Noto CJK font file (.otf or .ttc) after installation."
+            # 為了偵錯，列出所有可能的字體檔案
+            echo "Listing all font files in /usr/share/fonts/opentype/noto/ for debugging:"
+            ls -R /usr/share/fonts/opentype/noto/
             exit 1
           fi
-          echo "Found font at: $FONT_PATH"
-          # 使用 GitHub 的特殊語法將這個路徑設置為後續步驟可以使用的輸出變數
+          
+          # 成功找到，打印出來並設定為輸出
+          echo "Successfully found font at: $FONT_PATH"
           echo "font_path=$FONT_PATH" >> "$GITHUB_OUTPUT"
       # <<< 新增結束 >>>
 
@@ -58,6 +71,6 @@ jobs:
           UNSPLASH_ACCESS_KEY: ${{ secrets.UNSPLASH_ACCESS_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           IMGUR_CLIENT_ID: ${{ secrets.IMGUR_CLIENT_ID }}
-          # <<< 新增的環境變數：從上一步的輸出動態獲取字體路徑 >>>
+          # 從上一步的輸出動態獲取字體路徑
           CALENDAR_FONT_PATH: ${{ steps.find_font.outputs.font_path }}
         run: python daily_broadcast.py
