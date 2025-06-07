@@ -1,6 +1,3 @@
-          # 從上一步的輸出動態獲取字體路徑
-          CALENDAR_FONT_PATH: ${{ steps.find_font.outputs.font_path }}
-        run: python daily_broadcast.py
 # .github/workflows/daily_xiaoyun_broadcast.yml (v2.3 - 終極動態字體偵察版)
 
 name: Xiaoyun Daily Broadcast
@@ -74,3 +71,6 @@ jobs:
           UNSPLASH_ACCESS_KEY: ${{ secrets.UNSPLASH_ACCESS_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           IMGUR_CLIENT_ID: ${{ secrets.IMGUR_CLIENT_ID }}
+          # 從上一步的輸出動態獲取字體路徑
+          CALENDAR_FONT_PATH: ${{ steps.find_font.outputs.font_path }}
+        run: python daily_broadcast.py
