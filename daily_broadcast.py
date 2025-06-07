@@ -10,22 +10,19 @@ import json
 import time
 import logging
 import base64
-# <<< MODIFICATION START: Import warnings to handle DeprecationWarning >>>
 import warnings
-# <<< MODIFICATION END >>>
 
-# --- 配置日誌 ---
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
+# <<< 新增的依賴，用於生成圖片 >>>
+# 確保在 requirements.txt 中已添加 Pillow 和 sxtwl
+from PIL import Image, ImageDraw, ImageFont
+import sxtwl
+import tempfile
+# <<< 新增結束 >>>
+
+# --- 配置日誌 (保持不變) ---
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 logger = logging.getLogger(__name__)
-
-# <<< MODIFICATION START: Suppress the specific DeprecationWarning from line-bot-sdk >>>
-# This will hide the "LineBotSdkDeprecatedIn30" warning and keep the log clean.
 warnings.filterwarnings("ignore", category=DeprecationWarning)
-# <<< MODIFICATION END >>>
 
 # --- 環境變數 ---
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
@@ -33,30 +30,29 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 OPENWEATHERMAP_API_KEY = os.getenv("OPENWEATHERMAP_API_KEY")
 UNSPLASH_ACCESS_KEY = os.getenv("UNSPLASH_ACCESS_KEY")
 PEXELS_API_KEY = os.getenv("PEXELS_API_KEY")
+# <<< 新增的環境變數 >>>
+IMGUR_CLIENT_ID = os.getenv("IMGUR_CLIENT_ID")
+# <<< 新增結束 >>>
 
 GEMINI_MODEL_NAME = "gemini-1.5-flash-latest"
 GEMINI_TEXT_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL_NAME}:generateContent"
 GEMINI_VISION_MODEL_NAME = "gemini-1.5-flash-latest"
 GEMINI_VISION_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_VISION_MODEL_NAME}:generateContent"
 
-# --- 全局初始化與檢查 ---
+# --- 全局初始化與檢查 (已加入 Imgur 檢查) ---
 critical_error_occurred = False
-if not LINE_CHANNEL_ACCESS_TOKEN:
-    logger.critical("環境變數 LINE_CHANNEL_ACCESS_TOKEN 未設定。")
-    critical_error_occurred = True
-if not GEMINI_API_KEY:
-    logger.critical("環境變數 GEMINI_API_KEY 未設定。")
-    critical_error_occurred = True
-if not OPENWEATHERMAP_API_KEY:
-    logger.critical("環境變數 OPENWEATHERMAP_API_KEY 未設定。")
-    critical_error_occurred = True
-if not UNSPLASH_ACCESS_KEY:
-    logger.warning("環境變數 UNSPLASH_ACCESS_KEY 未設定，Unsplash 圖片功能將受限。")
-if not PEXELS_API_KEY:
-    logger.warning("環境變數 PEXELS_API_KEY 未設定，Pexels 圖片功能將受限。")
+if not LINE_CHANNEL_ACCESS_TOKEN: logger.critical("環境變數 LINE_CHANNEL_ACCESS_TOKEN 未設定。"); critical_error_occurred = True
+if not GEMINI_API_KEY: logger.critical("環境變數 GEMINI_API_KEY 未設定。"); critical_error_occurred = True
+if not OPENWEATHERMAP_API_KEY: logger.critical("環境變數 OPENWEATHERMAP_API_KEY 未設定。"); critical_error_occurred = True
+if not UNSPLASH_ACCESS_KEY: logger.warning("環境變數 UNSPLASH_ACCESS_KEY 未設定，Unsplash 圖片功能將受限。")
+if not PEXELS_API_KEY: logger.warning("環境變數 PEXELS_API_KEY 未設定，Pexels 圖片功能將受限。")
+# <<< 新增的檢查 >>>
+if not IMGUR_CLIENT_ID:
+    logger.warning("環境變數 IMGUR_CLIENT_ID 未設定，無法上傳並發送每日日曆圖片。")
+# <<< 新增結束 >>>
 
 if critical_error_occurred:
-    logger.error("由於缺少核心 API Keys (LINE, Gemini, OpenWeatherMap)，腳本無法繼續執行。")
+    logger.error("由於缺少核心 API Keys，腳本無法繼續執行。")
     exit(1)
 
 try:
@@ -66,7 +62,118 @@ except Exception as e:
     logger.critical(f"初始化 LineBotApi 失敗: {e}", exc_info=True)
     exit(1)
 
-# --- 圖片相關函數 (此區塊保持不變) ---
+# <<< 新增的函數：上傳圖片到 Imgur >>>
+def upload_to_imgur(image_path: str) -> str | None:
+    """將本地圖片上傳到 Imgur 並返回公開 URL"""
+    if not IMGUR_CLIENT_ID:
+        logger.error("upload_to_imgur called but IMGUR_CLIENT_ID is not set.")
+        return None
+    
+    logger.info(f"開始上傳圖片到 Imgur: {image_path}")
+    headers = {"Authorization": f"Client-ID {IMGUR_CLIENT_ID}"}
+    try:
+        with open(image_path, "rb") as image_file:
+            payload = {'image': base64.b64encode(image_file.read())}
+            response = requests.post("https://api.imgur.com/3/image", headers=headers, data=payload, timeout=60)
+            response.raise_for_status()
+            data = response.json()
+            if data.get("success"):
+                image_url = data["data"]["link"]
+                logger.info(f"成功上傳圖片到 Imgur，URL: {image_url}")
+                return image_url
+            else:
+                logger.error(f"Imgur API 回應 success=false。Response: {data}")
+                return None
+    except requests.exceptions.RequestException as e:
+        logger.error(f"上傳圖片到 Imgur 失敗: {e}", exc_info=True)
+        return None
+    except Exception as e:
+        logger.error(f"處理 Imgur 上傳時發生未知錯誤: {e}", exc_info=True)
+        return None
+# <<< 新增結束 >>>
+
+# <<< 新增的函數：生成每日日曆圖片 >>>
+def create_daily_calendar_image(now_datetime: datetime.datetime) -> str | None:
+    """生成每日日曆圖片並返回本地臨時檔案路徑"""
+    logger.info("開始生成每日日曆圖片...")
+    try:
+        # --- 1. 配色方案 ---
+        weekly_colors = [
+            {"hex": "#FFB3A7"}, {"hex": "#FFD6A5"}, {"hex": "#A8D8B9"},
+            {"hex": "#A7C7E7"}, {"hex": "#C3B1E1"}, {"hex": "#FFFEC8"},
+            {"hex": "#B2DFDB"}
+        ]
+        
+        # --- 2. 獲取日曆資料 ---
+        lunar = sxtwl.Lunar()
+        lunar_day = lunar.getDayBySolar(now_datetime.year, now_datetime.month, now_datetime.day)
+        weekday_index = now_datetime.weekday()
+        selected_color = weekly_colors[weekday_index]["hex"]
+
+        year = now_datetime.year
+        day = f"{now_datetime.day:02d}"
+        month_chinese = f"{now_datetime.month}月"
+        weekday_map = {0: "星期一", 1: "星期二", 2: "星期三", 3: "星期四", 4: "星期五", 5: "星期六", 6: "星期日"}
+        weekday_chinese = weekday_map[weekday_index]
+
+        lunar_date_str = f"農曆 {lunar_day.month_str}{lunar_day.day_str}"
+        solar_term_str = lunar_day.jq_str
+        info_text = f"{lunar_date_str} {solar_term_str}".strip()
+
+        # --- 3. 圖片與字體設定 ---
+        # 這個路徑是針對在 GitHub Actions 中安裝了 fonts-noto-cjk 套件後的標準路徑
+        font_path_cjk = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.otf"
+        
+        bg_color, primary_color, secondary_color = "#FFFFFF", selected_color, "#888888"
+        img_width, img_height, padding = 400, 500, 40
+
+        # --- 4. 繪製 ---
+        image = Image.new("RGB", (img_width, img_height), bg_color)
+        draw = ImageDraw.Draw(image)
+
+        font_weekday = ImageFont.truetype(font_path_cjk, 24)
+        font_month = ImageFont.truetype(font_path_cjk, 32)
+        font_day = ImageFont.truetype(font_path_cjk, 180)
+        font_year = ImageFont.truetype(font_path_cjk, 32)
+        font_info = ImageFont.truetype(font_path_cjk, 28)
+
+        draw.text((padding, padding), weekday_chinese, font=font_weekday, fill=secondary_color)
+        draw.text((padding, padding + 50), month_chinese, font=font_month, fill=primary_color)
+        
+        day_bbox = draw.textbbox((0, 0), day, font=font_day); day_width = day_bbox[2] - day_bbox[0]
+        draw.text(((img_width - day_width) / 2, padding + 90), day, font=font_day, fill=primary_color)
+        
+        year_bbox = draw.textbbox((0,0), str(year), font=font_year); year_width = year_bbox[2] - year_bbox[0]
+        draw.text(((img_width - year_width) / 2, padding + 290), str(year), font=font_year, fill=secondary_color)
+        
+        draw.line([(padding, padding + 350), (img_width - padding, padding + 350)], fill="#EEEEEE", width=2)
+        
+        info_bbox = draw.textbbox((0,0), info_text, font=font_info); info_width = info_bbox[2] - info_bbox[0]
+        draw.text(((img_width - info_width) / 2, padding + 375), info_text, font=font_info, fill=secondary_color)
+
+        # --- 5. 儲存到臨時檔案 ---
+        # delete=False 很重要，這樣在 with 區塊結束後檔案不會被刪除
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False, mode='wb') as temp_file:
+            image.save(temp_file, format="PNG")
+            temp_file_path = temp_file.name
+            logger.info(f"日曆圖片已成功生成到臨時檔案: {temp_file_path}")
+            return temp_file_path
+
+    except FileNotFoundError:
+        logger.error(f"FATAL: 中文字體檔案未找到於 '{font_path_cjk}'。請確認 GitHub Actions 工作流程中已安裝字體。")
+        return None
+    except Exception as e:
+        logger.error(f"生成每日日曆圖片時發生錯誤: {e}", exc_info=True)
+        return None
+# <<< 新增結束 >>>
+
+
+# --- 舊有函數區塊 (保持不變) ---
+# 以下所有函數 (_is_image_relevant_for_food_by_gemini_sync, fetch_image_for_food_from_unsplash,
+# fetch_image_for_food_from_pexels, get_current_datetime_for_location, format_date_and_day,
+# SOLAR_TERMS_DATA, get_current_solar_term_with_feeling, get_weather_for_generic_location,
+# generate_gemini_daily_prompt_v9) 都保持不變，直接複製即可。
+
 def _is_image_relevant_for_food_by_gemini_sync(image_base64: str, english_food_theme_query: str, image_url_for_log: str = "N/A") -> bool:
     logger.info(f"開始使用 Gemini Vision 判斷食物圖片相關性。英文主題: '{english_food_theme_query}', 圖片URL (日誌用): {image_url_for_log[:70]}...")
     prompt_parts = [
@@ -254,7 +361,6 @@ def fetch_image_for_food_from_pexels(english_food_theme_query: str, max_candidat
     logger.warning(f"最終未能從 Pexels 找到與食物主題 '{english_food_theme_query}' 高度相關的圖片。")
     return None, english_food_theme_query
 
-# --- 日期、節氣、通用天氣函數 (此區塊保持不變) ---
 def get_current_datetime_for_location(timezone_str='Asia/Kuala_Lumpur'):
     try:
         target_tz = pytz.timezone(timezone_str)
@@ -324,7 +430,7 @@ def get_weather_for_generic_location(api_key, lat=35.6895, lon=139.6917, lang="z
             possible_reactions = [
                 f"天氣是「{description}」，感覺很棒耶！最適合...在窗邊偷偷看著外面發生什麼事了喵！👀",
                 f"「{description}」呀～ 小雲的尾巴都忍不住跟著好心情搖擺起來了！今天也要元氣滿滿！🐾",
-                f"嗯嗯～是「{description}」的天氣呢！小雲想找個舒服的角落，把自己捲成一個小毛球～ （呼嚕呼嚕）"
+                f"嗯嗯～是「{description}」的天氣呢！小雲想找個舒服的角落，把自己捲成一個小毛球～ （呼嚕嚕嚕）"
             ]
             if temp_float is not None:
                 if "雨" in description or "rain" in description.lower() or "drizzle" in description.lower():
@@ -367,7 +473,6 @@ def get_weather_for_generic_location(api_key, lat=35.6895, lon=139.6917, lang="z
         logger.error(f"獲取通用地點天氣失敗: {e}", exc_info=True)
         return default_weather_info
 
-# <<< MODIFICATION START: Renamed and updated the prompt generation function to v9 >>>
 def generate_gemini_daily_prompt_v9(current_date_str_formatted, current_solar_term_name, current_solar_term_feeling, general_weather_info):
     prompt = f"""
 你現在扮演一隻叫做「小雲」的賓士公貓。
@@ -463,9 +568,7 @@ def generate_gemini_daily_prompt_v9(current_date_str_formatted, current_solar_te
 [請參考以上靈感，生成一組全新的 "daily_quest" JSON 物件。]
 """
     return prompt
-# <<< MODIFICATION END >>>
 
-# <<< MODIFICATION START: Updated main logic function >>>
 def get_daily_message_from_gemini_with_retry(max_retries=3, initial_retry_delay=10):
     logger.info("開始從 Gemini 獲取每日訊息內容...")
     target_location_timezone = 'Asia/Kuala_Lumpur'
@@ -610,20 +713,53 @@ def get_daily_message_from_gemini_with_retry(max_retries=3, initial_retry_delay=
 
 
     return messages_to_send
-# <<< MODIFICATION END >>>
 
-# --- 主執行 ---
+# --- 主執行 (已修改) ---
 if __name__ == "__main__":
-    script_start_time = datetime.datetime.now(pytz.timezone('Asia/Kuala_Lumpur'))
+    script_start_time = get_current_datetime_for_location() # 使用統一的時間函數
     logger.info(f"========== 每日小雲晨報廣播腳本開始執行 ==========")
     logger.info(f"目前時間 ({script_start_time.tzinfo}): {script_start_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
-    final_messages_to_send = get_daily_message_from_gemini_with_retry()
-
-    if final_messages_to_send:
+    # <<< 修改後的流程開始 >>>
+    all_messages_to_send = []
+    
+    # 步驟 1: 生成日曆圖片
+    calendar_image_local_path = create_daily_calendar_image(script_start_time)
+    
+    # 步驟 2: 如果圖片生成成功，就上傳並準備訊息
+    calendar_image_url = None
+    if calendar_image_local_path:
+        calendar_image_url = upload_to_imgur(calendar_image_local_path)
+        # 步驟 3: 無論上傳成功與否，都刪除本地臨時檔案，保持整潔
         try:
-            logger.info(f"準備廣播 {len(final_messages_to_send)} 則訊息到 LINE...")
-            for i, msg in enumerate(final_messages_to_send):
+            os.remove(calendar_image_local_path)
+            logger.info(f"已刪除臨時日曆圖片檔案: {calendar_image_local_path}")
+        except OSError as e:
+            logger.error(f"刪除臨時日曆圖片檔案失敗: {e}")
+
+    # 步驟 4: 如果成功獲取 URL，將其作為第一條訊息
+    if calendar_image_url:
+        calendar_message = ImageSendMessage(
+            original_content_url=calendar_image_url,
+            preview_image_url=calendar_image_url
+        )
+        all_messages_to_send.append(calendar_message)
+        logger.info("日曆圖片訊息已準備好，將作為第一則訊息發送。")
+    else:
+        logger.warning("未能生成或上傳日曆圖片，本次廣播將不包含日曆。")
+
+    # 步驟 5: 獲取由 Gemini 生成的其他訊息
+    gemini_messages = get_daily_message_from_gemini_with_retry()
+    
+    # 步驟 6: 將 Gemini 訊息附加到列表後面
+    if gemini_messages:
+        all_messages_to_send.extend(gemini_messages)
+    
+    # 步驟 7: 進行廣播
+    if all_messages_to_send:
+        try:
+            logger.info(f"準備廣播 {len(all_messages_to_send)} 則訊息到 LINE...")
+            for i, msg in enumerate(all_messages_to_send):
                  if isinstance(msg, TextSendMessage):
                      log_text_preview = msg.text.replace("\n", "↵ ")[:250]
                      logger.info(f"  訊息 #{i+1} (TextSendMessage): {log_text_preview}...")
@@ -632,15 +768,16 @@ if __name__ == "__main__":
                  else:
                      logger.info(f"  訊息 #{i+1} (未知類型: {type(msg)})")
 
-            line_bot_api.broadcast(messages=final_messages_to_send)
+            line_bot_api.broadcast(messages=all_messages_to_send)
             logger.info("訊息已成功廣播到 LINE！")
 
         except Exception as e:
             logger.critical(f"廣播訊息到 LINE 失敗: {e}", exc_info=True)
     else:
-        logger.critical("CRITICAL_ERROR: 從 Gemini 獲取訊息後，final_messages_to_send 為空或 None。不進行廣播。")
+        logger.critical("CRITICAL_ERROR: 所有訊息（包括日曆和Gemini）均未能生成。不進行廣播。")
+    # <<< 修改後的流程結束 >>>
 
-    script_end_time = datetime.datetime.now(pytz.timezone('Asia/Kuala_Lumpur'))
+    script_end_time = get_current_datetime_for_location()
     duration = script_end_time - script_start_time
     logger.info(f"腳本執行總耗時: {duration}")
     logger.info(f"========== 每日小雲晨報廣播腳本執行完畢 ==========")
