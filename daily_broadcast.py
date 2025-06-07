@@ -1,4 +1,4 @@
-# daily_broadcast.py (v3.1.1 - 高飽和度配色 + 絕對完整版)
+# daily_broadcast.py (v3.1.1 - 高飽和度配色 + 絕對完整版 + 節氣顯示)
 import os
 import random
 import datetime
@@ -91,7 +91,7 @@ def upload_to_imgur(image_path: str) -> str | None:
         return None
 
 def create_daily_calendar_image(now_datetime: datetime.datetime) -> str | None:
-    logger.info("開始生成全新設計版日曆圖片 (v3.1.1)...")
+    logger.info("開始生成全新設計版日曆圖片 (v3.1.1 - 含節氣)...") # 更新日誌描述
     
     if not CALENDAR_FONT_PATH or not os.path.exists(CALENDAR_FONT_PATH):
         logger.error(f"關鍵錯誤：從環境變數獲取的字體路徑 '{CALENDAR_FONT_PATH}' 無效或不存在。")
@@ -152,23 +152,67 @@ def create_daily_calendar_image(now_datetime: datetime.datetime) -> str | None:
         lunar_month_str = ymc[day_obj.getLunarMonth() - 1] + "月"
         lunar_day_str = rmc[day_obj.getLunarDay() - 1]
 
+        # jqmc 列表已在全局定義
         solar_term_str = jqmc[day_obj.getJieQi()] if day_obj.hasJieQi() else ""
         
         # --- 4. 開始繪製 ---
         image = Image.new("RGB", (img_width, img_height), bg_color)
         draw = ImageDraw.Draw(image)
         
+        # 繪製左上角 月份
         font_month_sml = ImageFont.truetype(font_path_regular, 36)
         draw.text((padding, padding), f"{month}月", font=font_month_sml, fill=main_color)
         draw.text((padding, padding + 40), month_eng, font=font_month_sml, fill=main_color)
         
+        # 繪製中間大日期數字
         font_day_huge = ImageFont.truetype(font_path_bold, 400)
         day_str = f"{day:02d}" if day < 10 else str(day)
         day_bbox = draw.textbbox((0, 0), day_str, font=font_day_huge)
         day_width = day_bbox[2] - day_bbox[0]
         day_height = day_bbox[3] - day_bbox[1]
-        draw.text(((img_width - day_width) / 2, (img_height - day_height) / 2 - 200), day_str, font=font_day_huge, fill=main_color)
         
+        # 計算大日期數字的繪製 Y 座標
+        # 根據您提供的參考圖和之前的討論，將大數字Y座標從中心向上偏移 200
+        day_y = (img_height - day_height) / 2 - 200 
+        
+        # 繪製大日期數字
+        draw.text(((img_width - day_width) / 2, day_y), day_str, font=font_day_huge, fill=main_color)
+        
+        # --- 新增：繪製節氣文字 (在左上方、大數字上方) ---
+        # solar_term_str 變數已經在上方從 sxtwl 獲取
+        # main_color (主題色) 和 font_path_regular 也已經定義
+        # padding (40) 也已經定義
+
+        if solar_term_str: # 檢查是否有節氣需要顯示
+            logger.info(f"準備繪製節氣: '{solar_term_str}'")
+            # 1. 定義節氣文字字體 (字號 50)
+            font_solar_term = ImageFont.truetype(font_path_regular, 50) 
+            
+            # 2. 計算節氣文字的邊界框 (用於確定位置)
+            # textbbox 返回 (left, top, right, bottom) 相對於文字繪製點 (0,0)
+            solar_term_bbox = draw.textbbox((0, 0), solar_term_str, font=font_solar_term)
+            # solar_term_bbox[3] 是文字在其邊界框中的底部偏移量 (即文字繪製點到文字底部的距離)
+
+            # 3. 計算節氣文字的繪製 Y 座標
+            # 我們希望節氣文字的底部，位於大日期文字頂部上方一定的間隔處
+            # 大日期文字的實際頂部 Y 座標 = day_y + day_bbox[1]
+            # 設定一個間隔，例如 30 像素
+            y_bottom_target = (day_y + day_bbox[1]) - 30 
+            # 節氣文字的繪製點 Y 座標 = 目標底部 Y 座標 - 節氣文字在其邊界框中的底部偏移量
+            solar_term_y = y_bottom_target - solar_term_bbox[3]
+
+            # 4. 設定節氣文字的繪製 X 座標 (使用 padding 40，與左上角月份對齊)
+            solar_term_x = padding 
+
+            # 5. 繪製節氣文字
+            draw.text((solar_term_x, solar_term_y), solar_term_str, font=font_solar_term, fill=main_color)
+            logger.info(f"已繪製節氣 '{solar_term_str}' 在 ({solar_term_x}, {solar_term_y})，字體大小 50，顏色 {main_color}")
+        else:
+            logger.info("今日無節氣，跳過節氣繪製。")
+
+        # --- 新增結束：繪製節氣文字 ---
+
+        # 繪製右下角 星期
         font_weekday_big = ImageFont.truetype(font_path_bold, 48)
         font_weekday_sml = ImageFont.truetype(font_path_regular, 24)
         weekday_eng_bbox = draw.textbbox((0, 0), weekday_eng, font=font_weekday_sml)
@@ -176,10 +220,13 @@ def create_daily_calendar_image(now_datetime: datetime.datetime) -> str | None:
         weekday_cn_bbox = draw.textbbox((-5, 0), weekday_chinese, font=font_weekday_big)
         draw.text((img_width - weekday_cn_bbox[2] - padding, img_height - padding - 100), weekday_chinese, font=font_weekday_big, fill=main_color)
         
-        lunar_info_str = f"{lunar_day_str} {solar_term_str}".strip()
+        # 繪製右下角 農曆和節氣 (這裡的節氣是 sxtwl getLunarDay() 後面的部分，與左上角獨立顯示)
+        # 我保留了您原有的邏輯，即農曆日期後面如果當天有節氣，也會加上節氣名稱
+        lunar_info_str = f"{lunar_day_str} {solar_term_str}".strip() 
         lunar_info_bbox = draw.textbbox((0, 0), lunar_info_str, font=font_weekday_sml)
         draw.text((img_width - lunar_info_bbox[2] - padding, img_height - padding - 40), lunar_info_str, font=font_weekday_sml, fill=secondary_text_color)
         
+        # 繪製下方的月曆格子
         cal = calendar.Calendar(firstweekday=6)
         month_cal = cal.monthdatescalendar(year, month)
         font_cal = ImageFont.truetype(font_path_regular, 20)
@@ -755,7 +802,7 @@ def get_daily_message_from_gemini_with_retry(max_retries=3, initial_retry_delay=
 # --- 主執行 ---
 if __name__ == "__main__":
     script_start_time = get_current_datetime_for_location()
-    logger.info(f"========== 每日小雲晨報廣播腳本開始執行 (v3.2) ==========")
+    logger.info(f"========== 每日小雲晨報廣播腳本開始執行 (v3.2 - 含節氣) ==========") # 更新日誌描述
     logger.info(f"目前時間 ({script_start_time.tzinfo}): {script_start_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
     all_messages_to_send = []
@@ -817,3 +864,82 @@ if __name__ == "__main__":
     duration = script_end_time - script_start_time
     logger.info(f"腳本執行總耗時: {duration}")
     logger.info(f"========== 每日小雲晨報廣播腳本執行完畢 ==========")
+
+
+
+# .github/workflows/daily_xiaoyun_broadcast.yml (v2.3 - 終極動態字體偵察版)
+
+name: Xiaoyun Daily Broadcast
+
+on:
+  schedule:
+    # 每天馬來西亞/新加坡/中國/台灣時間早上 5 點執行
+    # UTC+8 早上 5 點是 UTC 時間的前一天晚上 21:00
+    - cron: '0 21 * * *'
+  workflow_dispatch: # 允許手動觸發
+
+jobs:
+  broadcast-daily-message:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      
+      - name: Install Chinese Fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-noto-cjk
+
+      # <<< 終極核心步驟：動態偵察字體路徑 >>>
+      - name: Find Available Font Path and Set as Environment Variable
+        id: find_font
+        run: |
+          echo "Searching for available Noto CJK fonts in /usr/share/fonts..."
+          # 使用 find 命令在 /usr/share/fonts 中搜索任何 Noto CJK 字體檔案
+          # 我們優先尋找 .otf，如果沒有再找 .ttc
+          # -print -quit 表示找到第一個就退出
+          FONT_PATH=$(find /usr/share/fonts -name "NotoSansCJK*.otf" -print -quit)
+
+          # 如果沒找到 .otf，就嘗試尋找 .ttc
+          if [ -z "$FONT_PATH" ]; then
+            echo "No .otf font found, searching for .ttc fonts..."
+            FONT_PATH=$(find /usr/share/fonts -name "NotoSansCJK*.ttc" -print -quit)
+          fi
+          
+          # 如果兩種都沒找到，就報錯並終止流程
+          if [ -z "$FONT_PATH" ]; then
+            echo "::error::Could not find ANY Noto CJK font file (.otf or .ttc) after installation."
+            # 為了偵錯，列出所有可能的字體檔案
+            echo "Listing all font files in /usr/share/fonts/opentype/noto/ for debugging:"
+            ls -R /usr/share/fonts/opentype/noto/
+            exit 1
+          fi
+          
+          # 成功找到，打印出來並設定為輸出
+          echo "Successfully found font at: $FONT_PATH"
+          echo "font_path=$FONT_PATH" >> "$GITHUB_OUTPUT"
+      # <<< 新增結束 >>>
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Run Xiaoyun's daily broadcast script
+        env:
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENWEATHERMAP_API_KEY: ${{ secrets.OPENWEATHERMAP_API_KEY }}
+          UNSPLASH_ACCESS_KEY: ${{ secrets.UNSPLASH_ACCESS_KEY }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          IMGUR_CLIENT_ID: ${{ secrets.IMGUR_CLIENT_ID }}
+          # 從上一步的輸出動態獲取字體路徑
+          CALENDAR_FONT_PATH: ${{ steps.find_font.outputs.font_path }}
+        run: python daily_broadcast.py
