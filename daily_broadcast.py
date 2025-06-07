@@ -1,4 +1,4 @@
-# daily_broadcast.py (v2.2 - 從環境變數讀取動態字體路徑)
+# daily_broadcast.py (v2.3 - 最終美化版)
 import os
 import random
 import datetime
@@ -29,15 +29,7 @@ OPENWEATHERMAP_API_KEY = os.getenv("OPENWEATHERMAP_API_KEY")
 UNSPLASH_ACCESS_KEY = os.getenv("UNSPLASH_ACCESS_KEY")
 PEXELS_API_KEY = os.getenv("PEXELS_API_KEY")
 IMGUR_CLIENT_ID = os.getenv("IMGUR_CLIENT_ID")
-# <<< 新增的核心變數：從 GitHub Actions 獲取動態字體路徑 >>>
 CALENDAR_FONT_PATH = os.getenv("CALENDAR_FONT_PATH")
-# <<< 新增結束 >>>
-
-# --- 其他全局變數 ---
-GEMINI_MODEL_NAME = "gemini-1.5-flash-latest"
-GEMINI_TEXT_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL_NAME}:generateContent"
-GEMINI_VISION_MODEL_NAME = "gemini-1.5-flash-latest"
-GEMINI_VISION_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_VISION_MODEL_NAME}:generateContent"
 
 # --- sxtwl 數據列表 ---
 ymc = ["十一", "十二", "正", "二", "三", "四", "五", "六", "七", "八", "九", "十" ]
@@ -54,10 +46,7 @@ if not LINE_CHANNEL_ACCESS_TOKEN: logger.critical("環境變數 LINE_CHANNEL_ACC
 if not GEMINI_API_KEY: logger.critical("環境變數 GEMINI_API_KEY 未設定。"); critical_error_occurred = True
 if not OPENWEATHERMAP_API_KEY: logger.critical("環境變數 OPENWEATHERMAP_API_KEY 未設定。"); critical_error_occurred = True
 if not IMGUR_CLIENT_ID: logger.warning("重要：環境變數 IMGUR_CLIENT_ID 未設定，無法上傳並發送每日日曆圖片。")
-# <<< 新增的檢查 >>>
-if not CALENDAR_FONT_PATH:
-    logger.warning("重要：環境變數 CALENDAR_FONT_PATH 未設定或為空，日曆圖片生成將會失敗。")
-# <<< 新增結束 >>>
+if not CALENDAR_FONT_PATH: logger.warning("重要：環境變數 CALENDAR_FONT_PATH 未設定或為空，日曆圖片生成將會失敗。")
 if not UNSPLASH_ACCESS_KEY: logger.warning("環境變數 UNSPLASH_ACCESS_KEY 未設定，Unsplash 圖片功能將受限。")
 if not PEXELS_API_KEY: logger.warning("環境變數 PEXELS_API_KEY 未設定，Pexels 圖片功能將受限。")
 
@@ -72,6 +61,7 @@ except Exception as e:
     logger.critical(f"初始化 LineBotApi 失敗: {e}", exc_info=True)
     exit(1)
 
+# --- 上傳函數 (保持不變) ---
 def upload_to_imgur(image_path: str) -> str | None:
     if not IMGUR_CLIENT_ID:
         logger.error("upload_to_imgur called but IMGUR_CLIENT_ID is not set.")
@@ -98,26 +88,29 @@ def upload_to_imgur(image_path: str) -> str | None:
         logger.error(f"處理 Imgur 上傳時發生未知錯誤: {e}", exc_info=True)
         return None
 
-# <<< 最終修正的函數：生成每日日曆圖片 (v2.2) >>>
+# <<< 美化版函數：生成每日日曆圖片 (v2.3) >>>
 def create_daily_calendar_image(now_datetime: datetime.datetime) -> str | None:
     """生成每日日曆圖片並返回本地臨時檔案路徑"""
-    logger.info("開始生成每日日曆圖片...")
+    logger.info("開始生成美化版日曆圖片 (v2.3)...")
     
-    # <<< 核心修正：直接從環境變數檢查字體路徑 >>>
     if not CALENDAR_FONT_PATH or not os.path.exists(CALENDAR_FONT_PATH):
         logger.error(f"關鍵錯誤：從環境變數獲取的字體路徑 '{CALENDAR_FONT_PATH}' 無效或不存在。無法生成日曆圖片。")
         return None
-    # <<< 修正結束 >>>
 
     try:
         # --- 1. 配色方案 ---
         weekly_colors = [
-            {"hex": "#FFB3A7"}, {"hex": "#FFD6A5"}, {"hex": "#A8D8B9"},
-            {"hex": "#A7C7E7"}, {"hex": "#C3B1E1"}, {"hex": "#FFFEC8"},
-            {"hex": "#B2DFDB"}
+            # 為黑色背景重新挑選一組更亮、更飽和的顏色
+            {"hex": "#FFB3BA"}, # 週一 (亮珊瑚粉)
+            {"hex": "#FFDFBA"}, # 週二 (亮杏仁黃)
+            {"hex": "#BAFFC9"}, # 週三 (亮薄荷綠)
+            {"hex": "#BAE1FF"}, # 週四 (亮天空藍)
+            {"hex": "#E0BBE4"}, # 週五 (亮薰衣草)
+            {"hex": "#FFFFBA"}, # 週六 (亮檸檬黃)
+            {"hex": "#B9F2EA"}  # 週日 (亮松石綠)
         ]
         
-        # --- 2. 獲取日曆資料 (使用官方 sxtwl 用法) ---
+        # --- 2. 獲取日曆資料 ---
         day_obj = sxtwl.fromSolar(now_datetime.year, now_datetime.month, now_datetime.day)
         
         weekday_index = now_datetime.weekday()
@@ -140,31 +133,61 @@ def create_daily_calendar_image(now_datetime: datetime.datetime) -> str | None:
         info_text = f"{lunar_date_str} {solar_term_str}".strip()
 
         # --- 3. 圖片與字體設定 ---
-        font_path_cjk = CALENDAR_FONT_PATH # <--- 使用動態獲取到的路徑
+        font_path_cjk = CALENDAR_FONT_PATH
+        # <<< 修改：尋找粗體字體 >>>
+        # 嘗試在同一個目錄下尋找 Bold 或 Heavy 版本的字體
+        font_dir, font_file = os.path.split(font_path_cjk)
+        possible_bolds = [
+            font_file.replace("Regular", "Bold"),
+            font_file.replace("regular", "bold"),
+            font_file.replace("-Regular", "-Bold"),
+            font_file.replace("Regular", "Heavy"),
+        ]
+        font_path_bold = font_path_cjk # 預設使用常規體
+        for bold_name in possible_bolds:
+            path = os.path.join(font_dir, bold_name)
+            if os.path.exists(path):
+                font_path_bold = path
+                logger.info(f"找到可用的粗體字體於: {font_path_bold}")
+                break
+        if font_path_bold == font_path_cjk:
+            logger.warning("未找到對應的粗體字體，日期數字將使用常規體。")
+        # <<< 修改結束 >>>
+
+        # <<< 修改：純黑背景，文字顏色調整為白色系 >>>
+        bg_color = "#000000"
+        primary_color = selected_color  # 日期和月份使用今日主題色
+        secondary_color = "#BBBBBB"    # 其他文字使用亮灰色
+        # <<< 修改結束 >>>
         
-        bg_color, primary_color, secondary_color = "#FFFFFF", selected_color, "#888888"
         img_width, img_height, padding = 400, 500, 40
 
         # --- 4. 繪製 ---
         image = Image.new("RGB", (img_width, img_height), bg_color)
         draw = ImageDraw.Draw(image)
 
+        # <<< 修改：調整字體大小和使用粗體 >>>
         font_weekday = ImageFont.truetype(font_path_cjk, 24)
         font_month = ImageFont.truetype(font_path_cjk, 32)
-        font_day = ImageFont.truetype(font_path_cjk, 180)
+        font_day = ImageFont.truetype(font_path_bold, 220) # 使用粗體，並放大
         font_year = ImageFont.truetype(font_path_cjk, 32)
         font_info = ImageFont.truetype(font_path_cjk, 28)
+        # <<< 修改結束 >>>
 
         draw.text((padding, padding), weekday_chinese, font=font_weekday, fill=secondary_color)
         draw.text((padding, padding + 50), month_chinese, font=font_month, fill=primary_color)
         
         day_bbox = draw.textbbox((0, 0), day, font=font_day); day_width = day_bbox[2] - day_bbox[0]
-        draw.text(((img_width - day_width) / 2, padding + 90), day, font=font_day, fill=primary_color)
+        # <<< 修改：調整Y軸位置以適應更大的字體 >>>
+        draw.text(((img_width - day_width) / 2, padding + 70), day, font=font_day, fill=primary_color)
+        # <<< 修改結束 >>>
         
         year_bbox = draw.textbbox((0,0), str(year), font=font_year); year_width = year_bbox[2] - year_bbox[0]
         draw.text(((img_width - year_width) / 2, padding + 290), str(year), font=font_year, fill=secondary_color)
         
-        draw.line([(padding, padding + 350), (img_width - padding, padding + 350)], fill="#EEEEEE", width=2)
+        # <<< 修改：分隔線顏色變更為深灰色 >>>
+        draw.line([(padding, padding + 350), (img_width - padding, padding + 350)], fill="#444444", width=2)
+        # <<< 修改結束 >>>
         
         info_bbox = draw.textbbox((0,0), info_text, font=font_info); info_width = info_bbox[2] - info_bbox[0]
         draw.text(((img_width - info_width) / 2, padding + 375), info_text, font=font_info, fill=secondary_color)
@@ -173,14 +196,16 @@ def create_daily_calendar_image(now_datetime: datetime.datetime) -> str | None:
         with tempfile.NamedTemporaryFile(suffix=".png", delete=False, mode='wb') as temp_file:
             image.save(temp_file, format="PNG")
             temp_file_path = temp_file.name
-            logger.info(f"日曆圖片已成功生成到臨時檔案: {temp_file_path}")
+            logger.info(f"美化版日曆圖片已成功生成到臨時檔案: {temp_file_path}")
             return temp_file_path
 
     except Exception as e:
         logger.error(f"生成每日日曆圖片時發生錯誤: {e}", exc_info=True)
         return None
 
-# --- 舊有函數區塊 (保持不變) ---
+# --- 其他所有舊有函數 (保持不變) ---
+# ...
+# (此處省略所有其他函數的完整代碼，因為它們無需修改)
 def _is_image_relevant_for_food_by_gemini_sync(image_base64: str, english_food_theme_query: str, image_url_for_log: str = "N/A") -> bool:
     logger.info(f"開始使用 Gemini Vision 判斷食物圖片相關性。英文主題: '{english_food_theme_query}', 圖片URL (日誌用): {image_url_for_log[:70]}...")
     prompt_parts = [
