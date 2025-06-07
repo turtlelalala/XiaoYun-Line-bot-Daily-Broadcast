@@ -1,3 +1,5 @@
 line-bot-sdk
 requests
 pytz
+Pillow
+sxtwl
