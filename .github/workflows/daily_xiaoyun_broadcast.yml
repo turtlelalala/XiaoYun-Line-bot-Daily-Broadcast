@@ -1,3 +1,5 @@
+# .github/workflows/daily_xiaoyun_broadcast.yml
+
 name: Xiaoyun Daily Broadcast
 
 on:
@@ -21,7 +23,14 @@ jobs:
       - name: Set up Python 3.10
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10' # 建議使用一個較新的穩定版本
+          python-version: '3.10'
+
+      # <<< 新增的步驟：安裝中文字體 >>>
+      # 這是為了讓 Pillow 函式庫能夠正確渲染日曆圖片上的中文
+      - name: Install Chinese Fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-noto-cjk
 
       - name: Install dependencies
         run: |
@@ -34,5 +43,7 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           OPENWEATHERMAP_API_KEY: ${{ secrets.OPENWEATHERMAP_API_KEY }}
           UNSPLASH_ACCESS_KEY: ${{ secrets.UNSPLASH_ACCESS_KEY }}
-          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }} # <--- 確認這裡的 PEXELS_API_KEY
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          # <<< 新增的環境變數：傳入 Imgur Client ID >>>
+          IMGUR_CLIENT_ID: ${{ secrets.IMGUR_CLIENT_ID }}
         run: python daily_broadcast.py
