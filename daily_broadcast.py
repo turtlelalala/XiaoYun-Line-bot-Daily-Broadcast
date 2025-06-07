@@ -1,4 +1,4 @@
-# daily_broadcast.py (v3.2 - 鏤空設計版)
+# daily_broadcast.py (v3.2.1 - 高飽和度配色 + 變數修正)
 import os
 import random
 import datetime
@@ -91,10 +91,10 @@ def upload_to_imgur(image_path: str) -> str | None:
         logger.error(f"處理 Imgur 上傳時發生未知錯誤: {e}", exc_info=True)
         return None
 
-# <<< 終極設計版函數：生成每日日曆圖片 (v3.2) >>>
+# <<< 修正後的函數：生成每日日曆圖片 (v3.2.1) >>>
 def create_daily_calendar_image(now_datetime: datetime.datetime) -> str | None:
     """生成全新鏤空設計風格的日曆圖片"""
-    logger.info("開始生成全新鏤空設計版日曆圖片 (v3.2)...")
+    logger.info("開始生成全新鏤空設計版日曆圖片 (v3.2.1)...")
     
     if not CALENDAR_FONT_PATH or not os.path.exists(CALENDAR_FONT_PATH):
         logger.error(f"關鍵錯誤：從環境變數獲取的字體路徑 '{CALENDAR_FONT_PATH}' 無效或不存在。")
@@ -102,17 +102,27 @@ def create_daily_calendar_image(now_datetime: datetime.datetime) -> str | None:
 
     try:
         # --- 1. 顏色與尺寸設定 ---
+        # <<< 修改：更換為高飽和度、高亮度的顏色 >>>
         weekly_colors = [
-            {"main": "#F44336"}, {"main": "#FF9800"}, {"main": "#4CAF50"},
-            {"main": "#2196F3"}, {"main": "#673AB7"}, {"main": "#E91E63"},
-            {"main": "#FFC107"}
+            {"main": "#F44336"}, # 週一 (熱情紅)
+            {"main": "#FF9800"}, # 週二 (活力橙)
+            {"main": "#4CAF50"}, # 週三 (鮮草綠)
+            {"main": "#2196F3"}, # 週四 (天空藍)
+            {"main": "#9C27B0"}, # 週五 (魅力紫)
+            {"main": "#E91E63"}, # 週六 (時尚粉)
+            {"main": "#FFEB3B"}  # 週日 (檸檬黃)
         ]
+        # <<< 修改結束 >>>
+
         weekday_index = now_datetime.weekday()
         main_color = weekly_colors[weekday_index]["main"]
         bg_color = "#000000"
         content_bg_color = "#FFFFFF"
         primary_text_color = "#000000"
         secondary_text_color = "#999999"
+        # <<< 修正：定義 tertiary_color >>>
+        tertiary_color = "#CCCCCC"
+        # <<< 修正結束 >>>
 
         img_width, img_height = 600, 800
         padding = 40
@@ -136,8 +146,8 @@ def create_daily_calendar_image(now_datetime: datetime.datetime) -> str | None:
         
         year, month, day = now_datetime.year, now_datetime.month, now_datetime.day
         month_eng = now_datetime.strftime("%b").upper()
-        weekday_eng = now_datetime.strftime("SUN")
-        weekday_chinese = "星期日"
+        weekday_eng = now_datetime.strftime("%A").upper() # 修正為完整的星期英文
+        weekday_chinese = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"][weekday_index]
         
         ymc = ["十一", "十二", "正", "二", "三", "四", "五", "六", "七", "八", "九", "十"]
         rmc = ["初一", "初二", "初三", "初四", "初五", "初六", "初七", "初八", "初九", "初十",
@@ -148,20 +158,15 @@ def create_daily_calendar_image(now_datetime: datetime.datetime) -> str | None:
         
         # --- 4. 開始繪製 ---
         
-        # 創建主畫布 (黑色背景)
         final_image = Image.new("RGB", (img_width, img_height), bg_color)
         
-        # 創建內容畫布 (白色背景)
         content_image = Image.new("RGB", (img_width, img_height), content_bg_color)
         content_draw = ImageDraw.Draw(content_image)
 
-        # 在白色內容畫布上繪製所有非鏤空元素
-        # 左上角月份
         font_month_sml = ImageFont.truetype(font_path_regular, 30)
         content_draw.text((padding, padding), f"{month}月", font=font_month_sml, fill=main_color)
         content_draw.text((padding, padding + 35), month_eng, font=font_month_sml, fill=main_color)
 
-        # 右下角星期和農曆
         font_weekday_big = ImageFont.truetype(font_path_bold, 40)
         font_weekday_sml = ImageFont.truetype(font_path_regular, 20)
         
@@ -174,33 +179,26 @@ def create_daily_calendar_image(now_datetime: datetime.datetime) -> str | None:
         lunar_info_bbox = content_draw.textbbox((0,0), lunar_day_str, font=font_weekday_sml)
         content_draw.text((img_width - lunar_info_bbox[2] - padding, img_height - padding - 25), lunar_day_str, font=font_weekday_sml, fill=secondary_text_color)
 
-        # 創建一個黑色的遮罩層
         mask = Image.new("L", (img_width, img_height), 0)
         mask_draw = ImageDraw.Draw(mask)
         
-        # 在遮罩上用白色繪製出巨大的日期數字 (白色代表可見區域)
-        font_day_huge = ImageFont.truetype(font_path_bold, 485) # 減小15號
+        font_day_huge = ImageFont.truetype(font_path_bold, 485)
         day_str = f"{day:02d}"
         
         day_bbox = mask_draw.textbbox((0, 0), day_str, font=font_day_huge)
         day_width = day_bbox[2] - day_bbox[0]
         day_height = day_bbox[3] - day_bbox[1]
-        mask_draw.text(((img_width - day_width) / 2, (img_height - day_height) / 2 - 40), day_str, font=font_day_huge, fill=255) # 255代表純白
+        mask_draw.text(((img_width - day_width) / 2, (img_height - day_height) / 2 - 40), day_str, font=font_day_huge, fill=255)
 
-        # 創建一個純色的圖層，顏色為今日主題色
         color_layer = Image.new("RGB", (img_width, img_height), main_color)
         
-        # 使用日期數字遮罩，從顏色圖層中"摳出"日期的形狀
         day_image = Image.composite(color_layer, Image.new("RGB", (img_width, img_height), (0,0,0,0)), mask)
         
-        # 將白色內容畫布和摳出的日期圖層合併
         final_image.paste(content_image, (0,0))
         final_image = ImageChops.add(final_image, day_image)
 
-        # --- 再次獲取 draw 物件，在最上層繪製疊加內容 ---
         final_draw = ImageDraw.Draw(final_image)
 
-        # 左下角月曆
         cal = calendar.Calendar(firstweekday=6)
         month_cal = cal.monthdatescalendar(year, month)
         font_cal = ImageFont.truetype(font_path_regular, 18)
@@ -222,7 +220,6 @@ def create_daily_calendar_image(now_datetime: datetime.datetime) -> str | None:
                 final_draw.text((cal_x + i * 30, cal_y), f"{cal_day.day:02d}"[:2], font=font_cal, fill=color)
             cal_y += 22
 
-        # 正上方節氣
         if solar_term_str:
             font_term = ImageFont.truetype(font_path_bold, 40)
             term_bbox = final_draw.textbbox((0,0), solar_term_str, font=font_term)
@@ -783,7 +780,7 @@ def get_daily_message_from_gemini_with_retry(max_retries=3, initial_retry_delay=
 # --- 主執行 ---
 if __name__ == "__main__":
     script_start_time = get_current_datetime_for_location()
-    logger.info(f"========== 每日小雲晨報廣播腳本開始執行 (v3.1) ==========")
+    logger.info(f"========== 每日小雲晨報廣播腳本開始執行 (v3.2) ==========")
     logger.info(f"目前時間 ({script_start_time.tzinfo}): {script_start_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
     all_messages_to_send = []
