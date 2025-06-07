@@ -864,6 +864,3 @@ if __name__ == "__main__":
     duration = script_end_time - script_start_time
     logger.info(f"腳本執行總耗時: {duration}")
     logger.info(f"========== 每日小雲晨報廣播腳本執行完畢 ==========")
-          # 從上一步的輸出動態獲取字體路徑
-          CALENDAR_FONT_PATH: ${{ steps.find_font.outputs.font_path }}
-        run: python daily_broadcast.py
