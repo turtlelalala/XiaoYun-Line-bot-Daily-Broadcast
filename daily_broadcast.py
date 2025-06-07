@@ -1,4 +1,4 @@
-# daily_broadcast.py (v1.3 - 修正 sxtwl Day 物件屬性)
+# daily_broadcast.py (v2.1 - 根據官方 sxtwl 文件精確修正)
 import os
 import random
 import datetime
@@ -12,11 +12,11 @@ import logging
 import base64
 import warnings
 
-# <<< 新增的依賴，用於生成圖片 >>>
+# <<< 依賴 >>>
 from PIL import Image, ImageDraw, ImageFont
-import sxtwl
+import sxtwl # <--- 使用 sxtwl
 import tempfile
-# <<< 新增結束 >>>
+# <<< 結束 >>>
 
 # --- 配置日誌 (保持不變) ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
@@ -36,6 +36,15 @@ GEMINI_MODEL_NAME = "gemini-1.5-flash-latest"
 GEMINI_TEXT_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL_NAME}:generateContent"
 GEMINI_VISION_MODEL_NAME = "gemini-1.5-flash-latest"
 GEMINI_VISION_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_VISION_MODEL_NAME}:generateContent"
+
+# --- sxtwl 數據列表 (根據官方文件) ---
+ymc = ["十一", "十二", "正", "二", "三", "四", "五", "六", "七", "八", "九", "十" ]
+rmc = ["初一", "初二", "初三", "初四", "初五", "初六", "初七", "初八", "初九", "初十", 
+       "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十", 
+       "廿一", "廿二", "廿三", "廿四", "廿五", "廿六", "廿七", "廿八", "廿九", "三十", "卅一"]
+jqmc = ["冬至", "小寒", "大寒", "立春", "雨水", "惊蛰", "春分", "清明", "谷雨", "立夏",
+        "小满", "芒种", "夏至", "小暑", "大暑", "立秋", "处暑","白露", "秋分", "寒露", "霜降", 
+        "立冬", "小雪", "大雪"]
 
 # --- 全局初始化與檢查 (保持不變) ---
 critical_error_occurred = False
@@ -58,7 +67,7 @@ except Exception as e:
     logger.critical(f"初始化 LineBotApi 失敗: {e}", exc_info=True)
     exit(1)
 
-# <<< 新增的函數：上傳圖片到 Imgur (保持不變) >>>
+# --- 上傳與字體查找函數 (保持不變) ---
 def upload_to_imgur(image_path: str) -> str | None:
     if not IMGUR_CLIENT_ID:
         logger.error("upload_to_imgur called but IMGUR_CLIENT_ID is not set.")
@@ -85,7 +94,6 @@ def upload_to_imgur(image_path: str) -> str | None:
         logger.error(f"處理 Imgur 上傳時發生未知錯誤: {e}", exc_info=True)
         return None
 
-# <<< 智能字體查找函數 (保持不變) >>>
 def find_font() -> str | None:
     font_paths = [
         "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.otf",
@@ -100,7 +108,7 @@ def find_font() -> str | None:
     logger.error("在所有預設路徑中均未找到可用的中文字體。")
     return None
 
-# <<< 修正後的函數：生成每日日曆圖片 (v1.3) >>>
+# <<< 最終修正的函數：生成每日日曆圖片 (v2.1) >>>
 def create_daily_calendar_image(now_datetime: datetime.datetime) -> str | None:
     """生成每日日曆圖片並返回本地臨時檔案路徑"""
     logger.info("開始生成每日日曆圖片...")
@@ -112,9 +120,11 @@ def create_daily_calendar_image(now_datetime: datetime.datetime) -> str | None:
             {"hex": "#B2DFDB"}
         ]
         
-        # --- 2. 獲取日曆資料 (已修正 sxtwl 用法) ---
-        Day = sxtwl.fromSolar(now_datetime.year, now_datetime.month, now_datetime.day)
-        
+        # --- 2. 獲取日曆資料 (使用官方 sxtwl 用法) ---
+        # <<< 修正開始 >>>
+        day_obj = sxtwl.fromSolar(now_datetime.year, now_datetime.month, now_datetime.day)
+        # <<< 修正結束 >>>
+
         weekday_index = now_datetime.weekday()
         selected_color = weekly_colors[weekday_index]["hex"]
 
@@ -124,10 +134,14 @@ def create_daily_calendar_image(now_datetime: datetime.datetime) -> str | None:
         weekday_map = {0: "星期一", 1: "星期二", 2: "星期三", 3: "星期四", 4: "星期五", 5: "星期六", 6: "星期日"}
         weekday_chinese = weekday_map[weekday_index]
 
-        # <<< 修正開始：使用正確的屬性名稱 >>>
-        lunar_date_str = f"農曆 {Day.LMC}{Day.LDC}"
-        # 獲取節氣，如果今天不是節氣，jqmc 會是空字串
-        solar_term_str = Day.jqmc
+        # <<< 修正開始：使用官方文件中的正確方法 >>>
+        lunar_month_str = ymc[day_obj.getLunarMonth() - 1] # 月份索引是 0-11
+        lunar_day_str = rmc[day_obj.getLunarDay() - 1]   # 日期索引是 0-30
+        lunar_date_str = f"農曆 {lunar_month_str}月{lunar_day_str}"
+        
+        solar_term_str = ""
+        if day_obj.hasJieQi():
+            solar_term_str = jqmc[day_obj.getJieQi()]
         # <<< 修正結束 >>>
 
         info_text = f"{lunar_date_str} {solar_term_str}".strip()
@@ -721,10 +735,10 @@ def get_daily_message_from_gemini_with_retry(max_retries=3, initial_retry_delay=
 
     return messages_to_send
 
-# --- 主執行 (保持 v1.2 的邏輯) ---
+# --- 主執行 (保持不變) ---
 if __name__ == "__main__":
     script_start_time = get_current_datetime_for_location()
-    logger.info(f"========== 每日小雲晨報廣播腳本開始執行 (v1.3) ==========")
+    logger.info(f"========== 每日小雲晨報廣播腳本開始執行 (v2.1) ==========")
     logger.info(f"目前時間 ({script_start_time.tzinfo}): {script_start_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
     all_messages_to_send = []
