@@ -1,4 +1,4 @@
-# daily_broadcast.py (v2.1 - 根據官方 sxtwl 文件精確修正)
+# daily_broadcast.py (v2.2 - 從環境變數讀取動態字體路徑)
 import os
 import random
 import datetime
@@ -12,32 +12,34 @@ import logging
 import base64
 import warnings
 
-# <<< 依賴 >>>
+# --- 依賴 ---
 from PIL import Image, ImageDraw, ImageFont
-import sxtwl # <--- 使用 sxtwl
+import sxtwl
 import tempfile
-# <<< 結束 >>>
 
-# --- 配置日誌 (保持不變) ---
+# --- 配置日誌 ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 logger = logging.getLogger(__name__)
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-# --- 環境變數 (保持不變) ---
+# --- 環境變數 ---
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 OPENWEATHERMAP_API_KEY = os.getenv("OPENWEATHERMAP_API_KEY")
 UNSPLASH_ACCESS_KEY = os.getenv("UNSPLASH_ACCESS_KEY")
 PEXELS_API_KEY = os.getenv("PEXELS_API_KEY")
 IMGUR_CLIENT_ID = os.getenv("IMGUR_CLIENT_ID")
+# <<< 新增的核心變數：從 GitHub Actions 獲取動態字體路徑 >>>
+CALENDAR_FONT_PATH = os.getenv("CALENDAR_FONT_PATH")
+# <<< 新增結束 >>>
 
-# --- 其他全局變數 (保持不變) ---
+# --- 其他全局變數 ---
 GEMINI_MODEL_NAME = "gemini-1.5-flash-latest"
 GEMINI_TEXT_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL_NAME}:generateContent"
 GEMINI_VISION_MODEL_NAME = "gemini-1.5-flash-latest"
 GEMINI_VISION_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_VISION_MODEL_NAME}:generateContent"
 
-# --- sxtwl 數據列表 (根據官方文件) ---
+# --- sxtwl 數據列表 ---
 ymc = ["十一", "十二", "正", "二", "三", "四", "五", "六", "七", "八", "九", "十" ]
 rmc = ["初一", "初二", "初三", "初四", "初五", "初六", "初七", "初八", "初九", "初十", 
        "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十", 
@@ -46,13 +48,16 @@ jqmc = ["冬至", "小寒", "大寒", "立春", "雨水", "惊蛰", "春分", "�
         "小满", "芒种", "夏至", "小暑", "大暑", "立秋", "处暑","白露", "秋分", "寒露", "霜降", 
         "立冬", "小雪", "大雪"]
 
-# --- 全局初始化與檢查 (保持不變) ---
+# --- 全局初始化與檢查 ---
 critical_error_occurred = False
 if not LINE_CHANNEL_ACCESS_TOKEN: logger.critical("環境變數 LINE_CHANNEL_ACCESS_TOKEN 未設定。"); critical_error_occurred = True
 if not GEMINI_API_KEY: logger.critical("環境變數 GEMINI_API_KEY 未設定。"); critical_error_occurred = True
 if not OPENWEATHERMAP_API_KEY: logger.critical("環境變數 OPENWEATHERMAP_API_KEY 未設定。"); critical_error_occurred = True
-if not IMGUR_CLIENT_ID:
-    logger.warning("重要：環境變數 IMGUR_CLIENT_ID 未設定，無法上傳並發送每日日曆圖片。")
+if not IMGUR_CLIENT_ID: logger.warning("重要：環境變數 IMGUR_CLIENT_ID 未設定，無法上傳並發送每日日曆圖片。")
+# <<< 新增的檢查 >>>
+if not CALENDAR_FONT_PATH:
+    logger.warning("重要：環境變數 CALENDAR_FONT_PATH 未設定或為空，日曆圖片生成將會失敗。")
+# <<< 新增結束 >>>
 if not UNSPLASH_ACCESS_KEY: logger.warning("環境變數 UNSPLASH_ACCESS_KEY 未設定，Unsplash 圖片功能將受限。")
 if not PEXELS_API_KEY: logger.warning("環境變數 PEXELS_API_KEY 未設定，Pexels 圖片功能將受限。")
 
@@ -67,7 +72,6 @@ except Exception as e:
     logger.critical(f"初始化 LineBotApi 失敗: {e}", exc_info=True)
     exit(1)
 
-# --- 上傳與字體查找函數 (保持不變) ---
 def upload_to_imgur(image_path: str) -> str | None:
     if not IMGUR_CLIENT_ID:
         logger.error("upload_to_imgur called but IMGUR_CLIENT_ID is not set.")
@@ -94,26 +98,19 @@ def upload_to_imgur(image_path: str) -> str | None:
         logger.error(f"處理 Imgur 上傳時發生未知錯誤: {e}", exc_info=True)
         return None
 
-def find_font() -> str | None:
-    font_paths = [
-        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.otf",
-        "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.otf",
-        "/System/Library/Fonts/PingFang.ttc",
-        "C:/Windows/Fonts/msyh.ttc",
-    ]
-    for path in font_paths:
-        if os.path.exists(path):
-            logger.info(f"找到可用的字體於: {path}")
-            return path
-    logger.error("在所有預設路徑中均未找到可用的中文字體。")
-    return None
-
-# <<< 最終修正的函數：生成每日日曆圖片 (v2.1) >>>
+# <<< 最終修正的函數：生成每日日曆圖片 (v2.2) >>>
 def create_daily_calendar_image(now_datetime: datetime.datetime) -> str | None:
     """生成每日日曆圖片並返回本地臨時檔案路徑"""
     logger.info("開始生成每日日曆圖片...")
+    
+    # <<< 核心修正：直接從環境變數檢查字體路徑 >>>
+    if not CALENDAR_FONT_PATH or not os.path.exists(CALENDAR_FONT_PATH):
+        logger.error(f"關鍵錯誤：從環境變數獲取的字體路徑 '{CALENDAR_FONT_PATH}' 無效或不存在。無法生成日曆圖片。")
+        return None
+    # <<< 修正結束 >>>
+
     try:
-        # --- 1. 配色方案 (保持不變) ---
+        # --- 1. 配色方案 ---
         weekly_colors = [
             {"hex": "#FFB3A7"}, {"hex": "#FFD6A5"}, {"hex": "#A8D8B9"},
             {"hex": "#A7C7E7"}, {"hex": "#C3B1E1"}, {"hex": "#FFFEC8"},
@@ -121,10 +118,8 @@ def create_daily_calendar_image(now_datetime: datetime.datetime) -> str | None:
         ]
         
         # --- 2. 獲取日曆資料 (使用官方 sxtwl 用法) ---
-        # <<< 修正開始 >>>
         day_obj = sxtwl.fromSolar(now_datetime.year, now_datetime.month, now_datetime.day)
-        # <<< 修正結束 >>>
-
+        
         weekday_index = now_datetime.weekday()
         selected_color = weekly_colors[weekday_index]["hex"]
 
@@ -134,27 +129,23 @@ def create_daily_calendar_image(now_datetime: datetime.datetime) -> str | None:
         weekday_map = {0: "星期一", 1: "星期二", 2: "星期三", 3: "星期四", 4: "星期五", 5: "星期六", 6: "星期日"}
         weekday_chinese = weekday_map[weekday_index]
 
-        # <<< 修正開始：使用官方文件中的正確方法 >>>
-        lunar_month_str = ymc[day_obj.getLunarMonth() - 1] # 月份索引是 0-11
-        lunar_day_str = rmc[day_obj.getLunarDay() - 1]   # 日期索引是 0-30
+        lunar_month_str = ymc[day_obj.getLunarMonth() - 1]
+        lunar_day_str = rmc[day_obj.getLunarDay() - 1]
         lunar_date_str = f"農曆 {lunar_month_str}月{lunar_day_str}"
         
         solar_term_str = ""
         if day_obj.hasJieQi():
             solar_term_str = jqmc[day_obj.getJieQi()]
-        # <<< 修正結束 >>>
 
         info_text = f"{lunar_date_str} {solar_term_str}".strip()
 
-        # --- 3. 圖片與字體設定 (保持不變) ---
-        font_path_cjk = find_font()
-        if not font_path_cjk:
-            raise FileNotFoundError("關鍵錯誤：腳本無法找到任何可用的中文字體。")
+        # --- 3. 圖片與字體設定 ---
+        font_path_cjk = CALENDAR_FONT_PATH # <--- 使用動態獲取到的路徑
         
         bg_color, primary_color, secondary_color = "#FFFFFF", selected_color, "#888888"
         img_width, img_height, padding = 400, 500, 40
 
-        # --- 4. 繪製 (保持不變) ---
+        # --- 4. 繪製 ---
         image = Image.new("RGB", (img_width, img_height), bg_color)
         draw = ImageDraw.Draw(image)
 
@@ -178,7 +169,7 @@ def create_daily_calendar_image(now_datetime: datetime.datetime) -> str | None:
         info_bbox = draw.textbbox((0,0), info_text, font=font_info); info_width = info_bbox[2] - info_bbox[0]
         draw.text(((img_width - info_width) / 2, padding + 375), info_text, font=font_info, fill=secondary_color)
 
-        # --- 5. 儲存到臨時檔案 (保持不變) ---
+        # --- 5. 儲存到臨時檔案 ---
         with tempfile.NamedTemporaryFile(suffix=".png", delete=False, mode='wb') as temp_file:
             image.save(temp_file, format="PNG")
             temp_file_path = temp_file.name
@@ -190,11 +181,6 @@ def create_daily_calendar_image(now_datetime: datetime.datetime) -> str | None:
         return None
 
 # --- 舊有函數區塊 (保持不變) ---
-# 以下所有函數 (_is_image_relevant_for_food_by_gemini_sync, fetch_image_for_food_from_unsplash,
-# fetch_image_for_food_from_pexels, get_current_datetime_for_location, format_date_and_day,
-# SOLAR_TERMS_DATA, get_current_solar_term_with_feeling, get_weather_for_generic_location,
-# generate_gemini_daily_prompt_v9) 都保持不變，直接複製即可。
-
 def _is_image_relevant_for_food_by_gemini_sync(image_base64: str, english_food_theme_query: str, image_url_for_log: str = "N/A") -> bool:
     logger.info(f"開始使用 Gemini Vision 判斷食物圖片相關性。英文主題: '{english_food_theme_query}', 圖片URL (日誌用): {image_url_for_log[:70]}...")
     prompt_parts = [
@@ -738,7 +724,7 @@ def get_daily_message_from_gemini_with_retry(max_retries=3, initial_retry_delay=
 # --- 主執行 (保持不變) ---
 if __name__ == "__main__":
     script_start_time = get_current_datetime_for_location()
-    logger.info(f"========== 每日小雲晨報廣播腳本開始執行 (v2.1) ==========")
+    logger.info(f"========== 每日小雲晨報廣播腳本開始執行 (v2.2) ==========")
     logger.info(f"目前時間 ({script_start_time.tzinfo}): {script_start_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
     all_messages_to_send = []
