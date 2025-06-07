@@ -167,7 +167,7 @@ def create_daily_calendar_image(now_datetime: datetime.datetime) -> str | None:
         day_bbox = draw.textbbox((0, 0), day_str, font=font_day_huge)
         day_width = day_bbox[2] - day_bbox[0]
         day_height = day_bbox[3] - day_bbox[1]
-        draw.text(((img_width - day_width) / 2, (img_height - day_height) / 2 - 100), day_str, font=font_day_huge, fill=main_color)
+        draw.text(((img_width - day_width) / 2, (img_height - day_height) / 2 - 200), day_str, font=font_day_huge, fill=main_color)
         
         font_weekday_big = ImageFont.truetype(font_path_bold, 48)
         font_weekday_sml = ImageFont.truetype(font_path_regular, 24)
