@@ -1,4 +1,4 @@
-# daily_broadcast.py (v1.2 - 修正 sxtwl 使用方式)
+# daily_broadcast.py (v1.3 - 修正 sxtwl Day 物件屬性)
 import os
 import random
 import datetime
@@ -14,7 +14,7 @@ import warnings
 
 # <<< 新增的依賴，用於生成圖片 >>>
 from PIL import Image, ImageDraw, ImageFont
-import sxtwl # <--- 只需導入主模組
+import sxtwl
 import tempfile
 # <<< 新增結束 >>>
 
@@ -85,14 +85,13 @@ def upload_to_imgur(image_path: str) -> str | None:
         logger.error(f"處理 Imgur 上傳時發生未知錯誤: {e}", exc_info=True)
         return None
 
-# <<< 智能字體查找函數 (v1.1 新增) >>>
+# <<< 智能字體查找函數 (保持不變) >>>
 def find_font() -> str | None:
-    """在一系列常見路徑中查找可用的 CJK 字體"""
     font_paths = [
-        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.otf", # Debian/Ubuntu (推薦)
-        "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.otf",     # Arch Linux
-        "/System/Library/Fonts/PingFang.ttc",                   # macOS
-        "C:/Windows/Fonts/msyh.ttc",                            # Windows (微軟雅黑)
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.otf",
+        "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.otf",
+        "/System/Library/Fonts/PingFang.ttc",
+        "C:/Windows/Fonts/msyh.ttc",
     ]
     for path in font_paths:
         if os.path.exists(path):
@@ -101,7 +100,7 @@ def find_font() -> str | None:
     logger.error("在所有預設路徑中均未找到可用的中文字體。")
     return None
 
-# <<< 修正後的函數：生成每日日曆圖片 (v1.2) >>>
+# <<< 修正後的函數：生成每日日曆圖片 (v1.3) >>>
 def create_daily_calendar_image(now_datetime: datetime.datetime) -> str | None:
     """生成每日日曆圖片並返回本地臨時檔案路徑"""
     logger.info("開始生成每日日曆圖片...")
@@ -114,10 +113,8 @@ def create_daily_calendar_image(now_datetime: datetime.datetime) -> str | None:
         ]
         
         # --- 2. 獲取日曆資料 (已修正 sxtwl 用法) ---
-        # <<< 修正開始 >>>
         Day = sxtwl.fromSolar(now_datetime.year, now_datetime.month, now_datetime.day)
-        # <<< 修正結束 >>>
-
+        
         weekday_index = now_datetime.weekday()
         selected_color = weekly_colors[weekday_index]["hex"]
 
@@ -127,20 +124,17 @@ def create_daily_calendar_image(now_datetime: datetime.datetime) -> str | None:
         weekday_map = {0: "星期一", 1: "星期二", 2: "星期三", 3: "星期四", 4: "星期五", 5: "星期六", 6: "星期日"}
         weekday_chinese = weekday_map[weekday_index]
 
-        # <<< 修正開始：從 Day 物件獲取農曆資訊 >>>
-        lunar_date_str = f"農曆 {Day.getLunarMonthName()}{Day.getLunarDayName()}"
-        # 獲取節氣，如果今天不是節氣，則為空字串
-        solar_term_str = ""
-        if Day.hasJieQi():
-            solar_term_str = Day.getJieQiName()
+        # <<< 修正開始：使用正確的屬性名稱 >>>
+        lunar_date_str = f"農曆 {Day.LMC}{Day.LDC}"
+        # 獲取節氣，如果今天不是節氣，jqmc 會是空字串
+        solar_term_str = Day.jqmc
         # <<< 修正結束 >>>
 
         info_text = f"{lunar_date_str} {solar_term_str}".strip()
 
-        # --- 3. 圖片與字體設定 (使用智能查找) ---
+        # --- 3. 圖片與字體設定 (保持不變) ---
         font_path_cjk = find_font()
         if not font_path_cjk:
-            # 如果找不到字體，直接返回失敗，不再繼續執行
             raise FileNotFoundError("關鍵錯誤：腳本無法找到任何可用的中文字體。")
         
         bg_color, primary_color, secondary_color = "#FFFFFF", selected_color, "#888888"
@@ -727,10 +721,10 @@ def get_daily_message_from_gemini_with_retry(max_retries=3, initial_retry_delay=
 
     return messages_to_send
 
-# --- 主執行 (保持 v1.1 的邏輯) ---
+# --- 主執行 (保持 v1.2 的邏輯) ---
 if __name__ == "__main__":
     script_start_time = get_current_datetime_for_location()
-    logger.info(f"========== 每日小雲晨報廣播腳本開始執行 (v1.2) ==========")
+    logger.info(f"========== 每日小雲晨報廣播腳本開始執行 (v1.3) ==========")
     logger.info(f"目前時間 ({script_start_time.tzinfo}): {script_start_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
     all_messages_to_send = []
