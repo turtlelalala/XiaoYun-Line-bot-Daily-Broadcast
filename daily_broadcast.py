@@ -1,4 +1,4 @@
-# daily_broadcast.py (v3.1 - 高飽和度配色 + 完整版)
+# daily_broadcast.py (v3.2 - 鏤空設計版)
 import os
 import random
 import datetime
@@ -13,10 +13,10 @@ import base64
 import warnings
 
 # --- 依賴 ---
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageChops
 import sxtwl
 import tempfile
-import calendar # 用於計算月曆佈局
+import calendar
 
 # --- 配置日誌 ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
@@ -64,10 +64,8 @@ except Exception as e:
     logger.critical(f"初始化 LineBotApi 失敗: {e}", exc_info=True)
     exit(1)
 
-# --- 核心功能函數 ---
 
 def upload_to_imgur(image_path: str) -> str | None:
-    """將本地圖片上傳到 Imgur 並返回公開 URL"""
     if not IMGUR_CLIENT_ID:
         logger.error("upload_to_imgur called but IMGUR_CLIENT_ID is not set.")
         return None
@@ -93,9 +91,10 @@ def upload_to_imgur(image_path: str) -> str | None:
         logger.error(f"處理 Imgur 上傳時發生未知錯誤: {e}", exc_info=True)
         return None
 
+# <<< 終極設計版函數：生成每日日曆圖片 (v3.2) >>>
 def create_daily_calendar_image(now_datetime: datetime.datetime) -> str | None:
-    """生成全新設計風格的日曆圖片"""
-    logger.info("開始生成全新設計版日曆圖片 (v3.1)...")
+    """生成全新鏤空設計風格的日曆圖片"""
+    logger.info("開始生成全新鏤空設計版日曆圖片 (v3.2)...")
     
     if not CALENDAR_FONT_PATH or not os.path.exists(CALENDAR_FONT_PATH):
         logger.error(f"關鍵錯誤：從環境變數獲取的字體路徑 '{CALENDAR_FONT_PATH}' 無效或不存在。")
@@ -103,24 +102,17 @@ def create_daily_calendar_image(now_datetime: datetime.datetime) -> str | None:
 
     try:
         # --- 1. 顏色與尺寸設定 ---
-        # <<< 修改：更換為高飽和度、高亮度的顏色 >>>
         weekly_colors = [
-            {"main": "#F44336"}, # 週一 (熱情紅)
-            {"main": "#FF9800"}, # 週二 (活力橙)
-            {"main": "#4CAF50"}, # 週三 (鮮草綠)
-            {"main": "#2196F3"}, # 週四 (天空藍)
-            {"main": "#673AB7"}, # 週五 (深邃紫)
-            {"main": "#E91E63"}, # 週六 (魅力粉)
-            {"main": "#FFC107"}  # 週日 (明亮黃)
+            {"main": "#F44336"}, {"main": "#FF9800"}, {"main": "#4CAF50"},
+            {"main": "#2196F3"}, {"main": "#673AB7"}, {"main": "#E91E63"},
+            {"main": "#FFC107"}
         ]
-        # <<< 修改結束 >>>
-
         weekday_index = now_datetime.weekday()
         main_color = weekly_colors[weekday_index]["main"]
-        bg_color = "#FFFFFF"
+        bg_color = "#000000"
+        content_bg_color = "#FFFFFF"
         primary_text_color = "#000000"
-        secondary_color = "#AAAAAA"
-        tertiary_color = "#CCCCCC"
+        secondary_text_color = "#999999"
 
         img_width, img_height = 600, 800
         padding = 40
@@ -142,76 +134,106 @@ def create_daily_calendar_image(now_datetime: datetime.datetime) -> str | None:
         # --- 3. 獲取日曆資料 ---
         day_obj = sxtwl.fromSolar(now_datetime.year, now_datetime.month, now_datetime.day)
         
-        year = now_datetime.year
-        month = now_datetime.month
-        day = now_datetime.day
-        
+        year, month, day = now_datetime.year, now_datetime.month, now_datetime.day
         month_eng = now_datetime.strftime("%b").upper()
-        weekday_eng = now_datetime.strftime("%A").upper()
-        weekday_chinese = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"][weekday_index]
+        weekday_eng = now_datetime.strftime("SUN")
+        weekday_chinese = "星期日"
         
-        ymc = ["十一", "十二", "正", "二", "三", "四", "五", "六", "七", "八", "九", "十" ]
-        rmc = ["初一", "初二", "初三", "初四", "初五", "初六", "初七", "初八", "初九", "初十", 
-               "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十", 
+        ymc = ["十一", "十二", "正", "二", "三", "四", "五", "六", "七", "八", "九", "十"]
+        rmc = ["初一", "初二", "初三", "初四", "初五", "初六", "初七", "初八", "初九", "初十",
+               "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十",
                "廿一", "廿二", "廿三", "廿四", "廿五", "廿六", "廿七", "廿八", "廿九", "三十", "卅一"]
-
-        lunar_month_str = ymc[day_obj.getLunarMonth() - 1] + "月"
         lunar_day_str = rmc[day_obj.getLunarDay() - 1]
-
         solar_term_str = jqmc[day_obj.getJieQi()] if day_obj.hasJieQi() else ""
         
         # --- 4. 開始繪製 ---
-        image = Image.new("RGB", (img_width, img_height), bg_color)
-        draw = ImageDraw.Draw(image)
         
-        font_month_sml = ImageFont.truetype(font_path_regular, 36)
-        draw.text((padding, padding), f"{month}月", font=font_month_sml, fill=main_color)
-        draw.text((padding, padding + 40), month_eng, font=font_month_sml, fill=main_color)
+        # 創建主畫布 (黑色背景)
+        final_image = Image.new("RGB", (img_width, img_height), bg_color)
         
-        font_day_huge = ImageFont.truetype(font_path_bold, 500)
-        day_str = f"{day:02d}" if day < 10 else str(day)
-        day_bbox = draw.textbbox((0, 0), day_str, font=font_day_huge)
+        # 創建內容畫布 (白色背景)
+        content_image = Image.new("RGB", (img_width, img_height), content_bg_color)
+        content_draw = ImageDraw.Draw(content_image)
+
+        # 在白色內容畫布上繪製所有非鏤空元素
+        # 左上角月份
+        font_month_sml = ImageFont.truetype(font_path_regular, 30)
+        content_draw.text((padding, padding), f"{month}月", font=font_month_sml, fill=main_color)
+        content_draw.text((padding, padding + 35), month_eng, font=font_month_sml, fill=main_color)
+
+        # 右下角星期和農曆
+        font_weekday_big = ImageFont.truetype(font_path_bold, 40)
+        font_weekday_sml = ImageFont.truetype(font_path_regular, 20)
+        
+        weekday_eng_bbox = content_draw.textbbox((0,0), weekday_eng, font=font_weekday_sml)
+        content_draw.text((img_width - weekday_eng_bbox[2] - padding, img_height - padding - 90), weekday_eng, font=font_weekday_sml, fill=primary_text_color)
+        
+        weekday_cn_bbox = content_draw.textbbox((0,0), weekday_chinese, font=font_weekday_big)
+        content_draw.text((img_width - weekday_cn_bbox[2] - padding, img_height - padding - 65), weekday_chinese, font=font_weekday_big, fill=primary_text_color)
+        
+        lunar_info_bbox = content_draw.textbbox((0,0), lunar_day_str, font=font_weekday_sml)
+        content_draw.text((img_width - lunar_info_bbox[2] - padding, img_height - padding - 25), lunar_day_str, font=font_weekday_sml, fill=secondary_text_color)
+
+        # 創建一個黑色的遮罩層
+        mask = Image.new("L", (img_width, img_height), 0)
+        mask_draw = ImageDraw.Draw(mask)
+        
+        # 在遮罩上用白色繪製出巨大的日期數字 (白色代表可見區域)
+        font_day_huge = ImageFont.truetype(font_path_bold, 485) # 減小15號
+        day_str = f"{day:02d}"
+        
+        day_bbox = mask_draw.textbbox((0, 0), day_str, font=font_day_huge)
         day_width = day_bbox[2] - day_bbox[0]
         day_height = day_bbox[3] - day_bbox[1]
-        draw.text(((img_width - day_width) / 2, (img_height - day_height) / 2 - 50), day_str, font=font_day_huge, fill=main_color)
+        mask_draw.text(((img_width - day_width) / 2, (img_height - day_height) / 2 - 40), day_str, font=font_day_huge, fill=255) # 255代表純白
+
+        # 創建一個純色的圖層，顏色為今日主題色
+        color_layer = Image.new("RGB", (img_width, img_height), main_color)
         
-        font_weekday_big = ImageFont.truetype(font_path_bold, 48)
-        font_weekday_sml = ImageFont.truetype(font_path_regular, 24)
-        weekday_eng_bbox = draw.textbbox((0, 0), weekday_eng, font=font_weekday_sml)
-        draw.text((img_width - weekday_eng_bbox[2] - padding, img_height - padding - 130), weekday_eng, font=font_weekday_sml, fill=main_color)
-        weekday_cn_bbox = draw.textbbox((0, 0), weekday_chinese, font=font_weekday_big)
-        draw.text((img_width - weekday_cn_bbox[2] - padding, img_height - padding - 100), weekday_chinese, font=font_weekday_big, fill=main_color)
+        # 使用日期數字遮罩，從顏色圖層中"摳出"日期的形狀
+        day_image = Image.composite(color_layer, Image.new("RGB", (img_width, img_height), (0,0,0,0)), mask)
         
-        lunar_info_str = f"{lunar_day_str} {solar_term_str}".strip()
-        lunar_info_bbox = draw.textbbox((0, 0), lunar_info_str, font=font_weekday_sml)
-        draw.text((img_width - lunar_info_bbox[2] - padding, img_height - padding - 40), lunar_info_str, font=font_weekday_sml, fill=secondary_color)
-        
+        # 將白色內容畫布和摳出的日期圖層合併
+        final_image.paste(content_image, (0,0))
+        final_image = ImageChops.add(final_image, day_image)
+
+        # --- 再次獲取 draw 物件，在最上層繪製疊加內容 ---
+        final_draw = ImageDraw.Draw(final_image)
+
+        # 左下角月曆
         cal = calendar.Calendar(firstweekday=6)
         month_cal = cal.monthdatescalendar(year, month)
-        font_cal = ImageFont.truetype(font_path_regular, 20)
-        cal_x, cal_y = padding, img_height - padding - 200
+        font_cal = ImageFont.truetype(font_path_regular, 18)
+        cal_x, cal_y = padding + 10, img_height - padding - 180
         
         for i, week_day in enumerate(['S', 'M', 'T', 'W', 'T', 'F', 'S']):
-            draw.text((cal_x + i * 35, cal_y), week_day, font=font_cal, fill=tertiary_color)
+            final_draw.text((cal_x + i * 30, cal_y), week_day, font=font_cal, fill=secondary_text_color)
         
-        cal_y += 30
+        cal_y += 25
         for week in month_cal:
             for i, cal_day in enumerate(week):
-                color = secondary_color
+                color = secondary_text_color
                 if cal_day.month != month:
                     color = tertiary_color
                 if cal_day.day == day and cal_day.month == month:
                     color = main_color
-                    draw.ellipse((cal_x + i * 35 - 5, cal_y - 2, cal_x + i * 35 + 25, cal_y + 22), outline=main_color, width=1)
+                    final_draw.ellipse((cal_x + i * 30 - 4, cal_y - 2, cal_x + i * 30 + 20, cal_y + 20), outline=main_color, width=1)
                 
-                draw.text((cal_x + i * 35, cal_y), str(cal_day.day), font=font_cal, fill=color)
-            cal_y += 25
+                final_draw.text((cal_x + i * 30, cal_y), f"{cal_day.day:02d}"[:2], font=font_cal, fill=color)
+            cal_y += 22
+
+        # 正上方節氣
+        if solar_term_str:
+            font_term = ImageFont.truetype(font_path_bold, 40)
+            term_bbox = final_draw.textbbox((0,0), solar_term_str, font=font_term)
+            term_width = term_bbox[2] - term_bbox[0]
+            final_draw.text(((img_width - term_width) / 2, padding + 200), solar_term_str, font=font_term, fill=primary_text_color)
 
         # --- 5. 儲存 ---
         with tempfile.NamedTemporaryFile(suffix=".png", delete=False, mode='wb') as temp_file:
-            image.save(temp_file, format="PNG")
+            final_image.save(temp_file, format="PNG")
             temp_file_path = temp_file.name
-            logger.info(f"全新設計版日曆圖片已生成到臨時檔案: {temp_file_path}")
+            logger.info(f"全新鏤空設計版日曆圖片已生成到臨時檔案: {temp_file_path}")
             return temp_file_path
 
     except Exception as e:
@@ -761,7 +783,7 @@ def get_daily_message_from_gemini_with_retry(max_retries=3, initial_retry_delay=
 # --- 主執行 ---
 if __name__ == "__main__":
     script_start_time = get_current_datetime_for_location()
-    logger.info(f"========== 每日小雲晨報廣播腳本開始執行 (v3.0) ==========")
+    logger.info(f"========== 每日小雲晨報廣播腳本開始執行 (v3.1) ==========")
     logger.info(f"目前時間 ({script_start_time.tzinfo}): {script_start_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
     all_messages_to_send = []
