@@ -162,12 +162,12 @@ def create_daily_calendar_image(now_datetime: datetime.datetime) -> str | None:
         draw.text((padding, padding), f"{month}月", font=font_month_sml, fill=main_color)
         draw.text((padding, padding + 40), month_eng, font=font_month_sml, fill=main_color)
         
-        font_day_huge = ImageFont.truetype(font_path_bold, 500)
+        font_day_huge = ImageFont.truetype(font_path_bold, 400)
         day_str = f"{day:02d}" if day < 10 else str(day)
         day_bbox = draw.textbbox((0, 0), day_str, font=font_day_huge)
         day_width = day_bbox[2] - day_bbox[0]
         day_height = day_bbox[3] - day_bbox[1]
-        draw.text(((img_width - day_width) / 2, (img_height - day_height) / 2 - 50), day_str, font=font_day_huge, fill=main_color)
+        draw.text(((img_width - day_width) / 2, (img_height - day_height) / 2 - 100), day_str, font=font_day_huge, fill=main_color)
         
         font_weekday_big = ImageFont.truetype(font_path_bold, 48)
         font_weekday_sml = ImageFont.truetype(font_path_regular, 24)
